@@ -1,0 +1,604 @@
+---
+title: "Unit 3- Probability"
+output: ioslides_presentation
+---
+
+<style>
+  .col2 {
+    columns: 4 100px;         /* number of columns and width in pixels*/
+    -webkit-columns: 4 100px; /* chrome, safari */
+    -moz-columns: 4 100px;    /* firefox */
+    column-rule: 4px double #ff00ff;
+  }
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T)
+library('dplyr')
+library('pscl')
+library('kableExtra')
+library('tibble')
+library('ggplot2')
+library('openintro')
+```
+
+## Law of large numbers
+
+let's take an (intuitive) **computational** approach to probability, the following code simulates rolling a die $n$ times and computes the ratio of the number of ones that land up over $n$
+
+```{r}
+
+sample_prob <- vector()   # Initialize an empty vector
+
+sample_sizes <- 1:1000   # these will be our sample sizes, n
+
+for (N in sample_sizes) { 
+die <- 1:6
+rolls <- replicate(N,sample(die,size=1,replace=TRUE))
+sample_prob[N] <- table(
+  factor(rolls,levels = c(1,2,3,4,5,6)))[1]/N   
+}   
+   # can also do similar code in python!
+
+
+```
+
+---
+
+$p = \frac{\textrm{# of ones}}{n} \to 1/6 \approx 0.167  \qquad as \qquad  n \to \infty$
+
+```{r }
+plot(sample_sizes,sample_prob,log='x',
+  type="l",xlab = 'sample sizes- n', ylab='sample prob of rolling one')
+```
+
+
+
+
+## Probability of this **_or_** that
+
+Probability is essentially counting the number of events of one type divide by the total number of all possible events, thus it is related to combinatorics
+
+
+$P(A \textrm{ or } B) = P(A) + P(B) - P(A \textrm{ and } B)$
+
+compare to the following expression from set theory
+
+$|A \cup B| = |A| + |B| - |A \cap B|$
+
+let's test this on a dataframe, computing some "probabilities"
+
+We will look at data from the five games the Los Angeles Lakers played against the Orlando Magic in the 2009 NBA finals. Each row represents a shot Kobe Bryant took during these games
+
+---
+
+```{r}
+#download.file("http://www.openintro.org/stat/data/kobe.RData",
+      #        destfile = "kobe.RData")
+load("kobe.RData")
+```
+
+
+```{r echo =F}
+head(kobe,n=7L) %>%
+  kable() %>%
+  kable_styling(full_width=F,position = "left",font_size = 20)
+```
+
+---
+
+let $A=$ prob that shot was taken in game 1
+
+let $B=$  prob that shot was taken in quarter 1 (of _any_ game)
+
+```{r}
+total_shots <- nrow(kobe)
+  total_shots
+```
+
+```{r}
+A <- nrow(filter(kobe,game==1))
+  A
+```
+
+```{r}
+B <- nrow(filter(kobe,quarter==1))
+  B
+```
+
+---
+```{r}
+A_and_B <- nrow(filter(kobe,quarter==1 & game==1))
+  A_and_B
+```
+
+```{r}
+A_or_B <- nrow(filter(kobe,quarter==1 | game==1))
+  A_or_B
+```
+
+summarizing: 
+
+```{r echo = F}
+
+p_tble <- c("34/133","36/133","70/133","9/133","61/133")
+names(p_tble) <- c("P(A)","P(B)","P(A) + P(B)","P(A and B)", "P(A or B)")
+
+t(p_tble) %>%
+  kable() %>%
+  kable_styling(position = "left",font_size = 20)
+```
+
+$61/133 = 34/133 + 36/133 - 9/133$ everything checks out!
+
+## takeaway - avoid over (under) counting
+
+Think about if your boss asked you what proportion of your clients meet some criterias: A _**or**_ B
+
+This is a fairly important and common question in the business world
+
+While probability may seem very simple, it is important to keep fundamental rules in mind to avoid simple counting errors
+
+This issue will be addressed in the lab exercise the "42" problem
+
+## Marginal and Joint probabilities 
+
+
+* based on single variable, is called **marginal** probability
+
+* for two or more variables is called a **joint** probability 
+
+consider 2 **categorical** variables (columns) from kobe dataframe
+
+1. **basket** which cant take values: 'H' (hit) or 'M' (miss), 
+
+2. **quarter** which can take values:  1,2,3,4,1OT    
+
+This data can be obtained using `table()` function
+
+```{r results = 'hide'}
+baskets_marginal <- table(select(kobe,basket))
+
+addmargins(baskets_marginal)  # get totals
+```
+
+
+
+---
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Basket marginal  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; quarter marginal
+
+```{r echo=F, eval=F}
+ table(select(kobe,basket));            table(select(kobe,quarter))
+
+```
+
+
+<div class="col2">
+
+```{r echo = F}
+jj <- as.vector(table(select(kobe,basket)))
+jj[3] <- 133
+names(jj) <- c("H","M","TOTAL")
+
+jj %>%
+  kable(col.names = c("counts")) %>%
+  kable_styling(full_width=F,font_size = 20) 
+
+```
+<br/>
+<br/>
+<br/>
+<br/>
+
+```{r echo = F}
+jj <- as.vector(table(select(kobe,basket)))
+jj[3] <- 133
+jj <- jj/133
+jj <- round(jj,3)
+names(jj) <- c("H","M","TOTAL")
+
+jj %>%
+  kable(col.names = c("proportion")) %>%
+  kable_styling(full_width=F,font_size = 20) 
+
+```
+
+<br/>
+<br/>
+<br/>
+
+
+```{r echo = F}
+gg <- as.vector(table(select(kobe,quarter)))
+gg[6] <- 133
+names(gg) <- c("1","1OT","2","3",'4',"TOTAL")
+gg %>%
+  kable(col.names = c("counts")) %>%
+  kable_styling(full_width=F,font_size = 20)
+```
+
+```{r echo = F}
+gg <- as.vector(table(select(kobe,quarter)))
+gg[6] <- 133
+gg <- gg/133
+gg <- round(gg,3)
+names(gg) <- c("1","1OT","2","3",'4',"TOTAL")
+gg %>%
+  kable(col.names = c("proportion")) %>%
+  kable_styling(full_width=F,font_size = 20)
+```
+
+</div>
+
+0.564 is the prob of kobe missing any given shot in the series
+
+0.256 is the prob that a random shot, from any of the 5 games, taken by kobe was placed in the 3rd quarter
+
+you could argue that these are not probs, just historical \%s...
+
+
+
+## Contingency table from data frame
+
+Now let's create a contingency table which is the joint distribution for baskets and quarters 
+
+```{r results = 'hide'}
+    contingency_table <- table(select(kobe,basket,quarter))
+    addmargins(contingency_table)
+```
+
+```{r echo = F}
+contingency_table <- as.matrix(table(select(kobe,basket,quarter)))
+vec1 <- contingency_table[1,]
+vec1[6] <- 58
+p <- names(vec1)
+p[6] <- 'TOTAL'
+vec2 <- contingency_table[2,]
+vec2[6] <- 75
+pp <- names(vec2)
+pp[6] <- "TOTAL"
+vec3 <- c(36,7,25,34,31,133)
+dd <- c(vec1,vec2,vec3)
+
+hh <- matrix(dd,nrow=3,byrow=T)
+row.names(hh) <- c("H","M","TOTAL")
+colnames(hh) <- pp
+
+
+hh %>%
+  kable() %>%
+  kable_styling(full_width=F,font_size = 24)
+```
+
+Now we can use this to talk about **conditional probabilities**
+
+## Row proportions
+ 
+
+```{r echo = F}
+contingency_table <- as.matrix(table(select(kobe,basket,quarter)))
+vec1 <- contingency_table[1,]
+vec1[6] <- 58
+vec1 <- round(vec1/58,3)
+p <- names(vec1)
+p[6] <- 'TOTAL'
+vec2 <- contingency_table[2,]
+vec2[6] <- 75
+vec2 <- round(vec2/75,3)
+pp <- names(vec2)
+pp[6] <- "TOTAL"
+vec3 <- round(c(36,7,25,34,31,133)/133,3)
+dd <- c(vec1,vec2,vec3)
+
+hh <- matrix(dd,nrow=3,byrow=T)
+row.names(hh) <- c("H","M","TOTAL")
+colnames(hh) <- pp
+
+
+hh %>%
+  kable() %>%
+  kable_styling(full_width=F,font_size = 24)
+```
+
+These are probabilities of shots being taken in various quarters, **conditioned on** whether the shot is a hit (H) or miss (M), notice the bottom row is the marginal (unconditioned) for example
+
+$P(\textrm{Q3 } | \textrm{ M}) = 0.240$
+
+_Of the missed shots, what probability (or percentage) of them occurred in the 3rd quarter?_ (Answer: 0.240)
+
+---
+
+Column proportions
+```{r echo = F}
+contingency_table <- as.matrix(table(select(kobe,basket,quarter)))
+vec1 <- contingency_table[1,]
+vec1[6] <- 58
+
+p <- names(vec1)
+p[6] <- 'TOTAL'
+vec2 <- contingency_table[2,]
+vec2[6] <- 75
+
+pp <- names(vec2)
+pp[6] <- "TOTAL"
+vec3 <- c(36,7,25,34,31,133)
+vec1 <- round(vec1/vec3,3)
+vec2 <- round(vec2/vec3,3)
+vec3 <- c(1,1,1,1,1,1)
+dd <- c(vec1,vec2,vec3)
+
+hh <- matrix(dd,nrow=3,byrow=T)
+row.names(hh) <- c("H","M","TOTAL")
+colnames(hh) <- pp
+
+
+hh %>%
+  kable() %>%
+  kable_styling(full_width=F,font_size = 24)
+```
+
+These are probabilities of shot being a hit or miss, **conditioned on** what quarter the shot was taken on, notice the rightmost column is the marginal (unconditioned) for example
+
+$P(\textrm{H } | \textrm{ Q2}) = 0.44$
+
+_In the 2nd quarter, what probability (or percentage) of shots did kobe hit?_ (Answer: 0.44)
+
+## How to get proportions in R
+
+```{r}
+round(prop.table(contingency_table, 1),2) # row percentages
+round(prop.table(contingency_table, 2),2) # column percentages
+
+```
+
+---
+
+ Cell proportions: $P(A \textrm{ and } B)$ 
+
+The relationship between conditional (row or column proportions) and cell proportions is: 
+
+$P(A | B) = \frac{P(A \textrm{ and } B)}{P(B)}$
+
+```{r}
+mytable <- round(prop.table(contingency_table),3) # cell percentages
+addmargins(mytable)
+```
+
+ex: $P(\textrm{H } | \textrm{ Q2}) = \frac{P(H \textrm{ and } Q2)}{P(Q2)} = \frac{0.083}{0.188} = 0.44$
+
+
+
+## Tree diagrams 
+
+**Tree diagrams** are a tool to organize outcomes and probabilities around the structure of the
+data. They are most useful when two or more processes occur in a sequence and each process is
+conditioned on its predecessors
+
+Tree diagrams can be built with the openintro package
+
+``` {r eval =F}
+install.packages('openintro')
+library('openintro')
+
+treeDiag(c('Breakfast?','Go to class'), c(.4,.6),
+   list(c(.4,.36,.34),c(.6,.3,.1)), c('Yes','No'),
+   c('Statistics','English','Sociology'), showWork=TRUE)
+```
+
+---
+
+``` {r echo =F}
+treeDiag(c('Breakfast?','Go to class'), c(.4,.6),
+   list(c(.4,.36,.34),c(.6,.3,.1)), c('Yes','No'),
+   c('Statistics','English','Sociology'), showWork=TRUE)
+```
+
+## Decision Tree
+
+Combine decisions with probabilistic outcomes $\to$ decision tree
+
+
+```{r echo=F,fig2, fig.align='center'}
+knitr::include_graphics("monte-hall.jpg")
+```
+
+## "Formal" probability
+
+You can approach probability from different angles, you can think in terms of frequency tables, or, you can think about it from a more mathematical perspective. This perspective is important for talking about _distributions_
+
+let's start with **discrete** case:
+
+Say a random var $X$ takes a number of (possibly countably infinite) discrete values $\{x_i\}$ where each $x_i$ is a real number. Then a probability mass function (pmf), $p(x_i)$ must satisfy
+
+1. $p(x_i) \ge 0$ for all outcomes $i$
+2. $\sum_i^\infty p(x_i) =1$
+
+##  Continuous pdf
+
+Say a random var $X$ takes values x on a continuum $R_X$. The probability that x lies in the interval $[a,b]$ is 
+
+$P(a \le x \le b ) = \int_a^b f(x)dx$
+
+where $f(x)$ is called a probability density function satisfying
+
+1. $f(x) \ge 0$ for all x
+2. $\int_{R_x} f(x)dx = 1$
+
+Graphically, the probability is the **area** underneath the curve $f(x)$ between $x=a$ and $x=b$.
+
+## Cumulative dist functions (CDFs)
+
+**Discrete CDF**: $F(x) = \sum_{x_i \le x} p(x_i)$
+
+**Continuous CDF**: $F(x) = \int_{-\infty}^xf(t)dt$
+
+**Properties**
+
+1. non-_decreasing_: if $a < b$ then $F(a) \le F(b)$
+2. $F(x)$ takes values on the interval $[0,1]$
+3. $P(a \le x \le b) = F(b) - F(a)$
+
+## Expectation - mean and variance,SD
+
+**discrete**
+
+$E(X) = \sum_i x_ip(x_i) = \mu$ - the "mean"
+
+**continuous**
+
+$E(X) = \int_{-\infty}^\infty x f(x)dx  = \mu$ - the "mean"
+
+**mode & median**
+
+most frequent value (non-unique e.g. "bimodal") & middle value
+
+**variance** 
+
+$\sigma^2 = V(X) = E[(X-E(X))^2] = E(X^2) - [E(X)]^2$
+$S.D. = \sqrt{\sigma^2} = \sigma$
+
+## Moments
+
+$E(X) = \mu$  called the 1st moment
+
+$E(X^n)$ is called the nth moment
+
+$\mu$ is a measure of central tendency
+
+$\sigma^2$ is a measure of spread about $\mu$
+
+$\operatorname{E}\left[\left(\frac{X-\mu}{\sigma}\right)^3 \right] = \frac{\mu_3}{\sigma^3}$  measure of asymmetry about $\mu$
+
+$\operatorname{E} \left[\left(\frac{X - \mu}{\sigma}\right)^4\right] = \frac{\mu_4}{\sigma^4}$ measure of the tail of the dist
+
+## Sample mean, Sample variance/SD
+
+The sample mean over $n$ samples*, $X_1, X_2, ..., X_n$, from the distribution (population)
+is
+
+$\overline{X} = \frac{1}{n}\sum_i X_i \qquad \qquad \qquad$    &nbsp; &nbsp;    unbiased estimator of $\mu$
+
+The sample variance over this same sample is
+
+ $s^2 = \frac{1}{(n-1)}\sum_i^n (\overline{X_i} - \overline{X})^2 \qquad$ unbiased estimator of $\sigma^2$
+ 
+ $s = \sqrt{s^2}\qquad \qquad \qquad \qquad$ &nbsp; &nbsp;  biased estimator of $\sigma$
+ 
+ We will discuss sample _bias_ a bit later in the course
+ 
+     *we assume each sample is i.i.d
+ 
+## Sampling distributions
+
+It's important to understand that if a random variable, $X$ has some distribution, then statistics over i.i.d samples of size $n$ of $X$, such as $\overline{X}$, also are random variables themselves
+
+Thus these statistics, have their own _separate_ distributions; which is not the same distribution as that of the underlying random variable $X$ necessarily
+
+$X$ and $\overline{X}$ have different distributions
+
+$n$ is a **parameter** of the distribution of $\overline{X}$
+
+## Standard error of the mean
+
+The standard error of the mean (SEM) can be expressed as
+
+$\textrm{S.E.M.} = \frac{\sigma}{\sqrt{n}}$
+
+where 
+
+σ is the standard deviation of the population
+
+$n$ is the size (number of observations) of the sample.
+
+
+If the population's (or "distribution's") standard deviation is unkown, the standard error of the mean is usually estimated as the sample standard deviation divided by the square root of the sample size (assuming statistical independence of the values in the sample). 
+
+## Deriviation
+
+* If $x_1, x_2 , \ldots, x_n$ are $n$ independent observations from a population that has a mean $\mu$ and standard deviation $\sigma$, then the variance of the total $T = (x_1 + x_2 + \cdots + x_n)$ is $n\sigma^2$
+
+* The variance of $T/n$ (the mean $\bar{x}$) must be $n\left( \frac{\sigma^2}{n^2}\right)=\frac{\sigma^2}{n}$. Alternatively, $\text{var}(\frac{T}{n}) = \frac{1}{n^2}\text{var}(T) = \frac{1}{n^2}n\sigma^2 = \frac{\sigma^2}{n}$
+
+* And the standard deviation of $T/n$ must be $\sigma/{\sqrt{n}}$
+
+This has some important consequences as we shall see by example
+
+## Rolling a die
+
+A die has a discrete pmf with expectation and variance
+
+$E(X) \equiv \mu = \frac{1}{6}(1+2+3+4+5+6) = 3.5$
+
+$\sigma^2 = \frac{1}{6}(1^2 +2^2+3^2+4^2+5^2+6^2 - 3.5^2) \approx 2.9$
+
+$\sigma \approx \sqrt{2.9} = 1.7$
+
+When people say "standard error of the mean", what they are saying is that if you draw $n$ samples and calculate the sample mean, $\overline{X}$, **that mean itself has a distribution** which is normal with standard deviation given by approximately $\sigma /  \sqrt{n}$
+
+Next, I will show you how to empirically study this:
+
+## S.E.M by Simulation: double averaging
+1. Fix a sample size value $n$
+2. Draw $n$ samples, $X_1, X_2, ..., X_n$, from the dist/population
+3. Compute the sample mean, $\overline{X} = \frac{1}{n}\sum_i X_i$
+4. go back,repeat steps 2 and 3, $m$ times, (e.g. $m = 100$)
+5. Estimate the standard error of the mean by calculating the standard deviation of the means, $\overline{X_1},\overline{X_2}, ..., \overline{X_m}$ $\textrm{Est(S.E.M.)} = \sqrt{\frac{1}{(m-1)}\sum_j^m (\overline{X_j} - \overline{\overline{X}})^2}$ where $\overline{\overline{X}}$ is the average of the averages!! You will need to draw $n \times m$ samples, **for each value of n**
+6. change $n$ then, go back to step 1
+
+
+## Example: back to tossing dice
+
+
+```{r}
+sample_sizes <- 1:1000   # note its samples SIZES, not sample SIZE
+sds <- vector()
+avgs <- vector()
+standard_errors <- vector()
+
+for (N in sample_sizes) { 
+die <- 1:6
+rolls <- replicate(N,sample(die,size=1,replace=TRUE))
+avgs[N] <- mean(rolls)
+sds[N] <- sd(rolls)
+
+standard_errors[N] <- sd(     # Note the two layers of averaging
+  replicate(50,mean(
+    replicate(N,sample(die,size=1,replace=TRUE)))))
+}
+````
+
+## Means of the samples (size n)
+Notice it tends towards 3.5
+```{r echo=F}
+plot(sample_sizes,avgs,type='l',xlab='n')
+```
+
+## S.D.s of samples (size n)
+Notice it tends to 1.7
+```{r echo=F}
+plot(sample_sizes,sds,type='l',xlab='n')
+```
+
+## S.D.s of Means of samples (size n)
+ the Est(S.E.M.) as function of $n$, $[m=50]$ &nbsp;&nbsp; ~ $1.7/\sqrt{n}$ 
+```{r echo=F}
+plot(sample_sizes,standard_errors,type='l',xlab='n')
+```
+
+
+##  Summary: sorry to be redundant
+
+**Distribution of the _sample statistic_**
+
+ The means of samples of size $n$ are normally distributed with standard deviation $\sigma/\sqrt{n}$ where sigma is the population (underlying distribution's) standard deviation 1.7. Note that $n$ is a parameter of this so-called "sampling distribution"
+
+**Distribution of the sample _itself_**
+
+ Each of the random variables in a sample of size $n$ are UNIFORMLY (discrete) distributed with standard deviation 1.7 and mean 3.5
+ 
+**Required Conditions**
+
+samples must be i.i.d, as usual
+
