@@ -1,0 +1,851 @@
+---
+title: 'Unit 7: Stats wrap-up'
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#library('dplyr')
+#library('MASS')
+require(MASS)
+require(dplyr)
+library('plyr')
+library('ggplot2')
+library('kableExtra')
+```
+
+<style>
+  .col2 {
+    columns: 2 200px;         /* number of columns and width in pixels*/
+    -webkit-columns: 2 200px; /* chrome, safari */
+    -moz-columns: 2 200px;    /* firefox */
+  }
+  </style>
+  
+## Unit 7: Agenda
+
+- chisquared test for independence
+
+- Fisher's exact test, KS GoF test
+
+- QQ plots
+
+- paired and unpaired t-tests
+
+- Power and effect size
+
+- ANOVA
+
+- Mann Whitney U test (wilcox test)
+
+- Exercises for Unit 7
+
+
+## Simulated vs real data
+
+* Simulated data is useful to do a quick test to check that you understand the theory and how to run the functions in R
+
+* So usually when I am trying to explain a statistical concept such as the chisquared test, I will generate simulated data to explain the concept
+
+* Examples of _simulated_ data:
+
+```{r}
+x <- sample(1:6,100,replace=TRUE) # sample data from uniform discrete
+y <- rt(100,3) # sample data from a t-distribution
+```
+
+* The real purpose of all these statistical tools is to run them on _REAL_ data, we will eventually get to some real data examples
+
+
+## Behavior of `chisquared.test(x,p)`
+
+1. if `x` is a one-way contingency-table then it will do a goodness of fit test
+    + if `p` is omitted then since expected frequencies are not supplied it will assume a uniform discrete with `p = 1/length(x)`
+
+2. If `x` is a two-way contingency table it will do a test for independence that is it will test the null hypothesis that the joint distribution is a product of the row and column marginals
+
+3. In all cases the expected (null-hypothesis) cell counts _should_ be at least 5 in each cell
+
+4. Careful about passing a table with margins added, it treats the margins as a bin
+   
+
+---
+
+``` {r echo=T}
+a <- table(sample(1:4,size=30,replace=T))
+```
+``` {r echo=F}
+a
+```
+```{r}
+chisq.test(a) 
+```
+In this case the expected counts $[E_1,E_2,E_3,E_4]$ are 
+
+$30p = 30[0.25,0.25,0.25,0.25] = [7.5,7.5,7.5,7.5]$
+
+
+## Chisquared test for independence
+
+A two-way table is another name for a contingency table. Let's examine the Kobe two-way table again:
+
+```{r echo=F}
+load("kobe.RData")
+contingency_table <- table(select(kobe,basket,quarter))
+kobes_real_data <- contingency_table
+addmargins(contingency_table)
+```
+
+Our null and alternative hypotheses are:
+
+$$H_0: \textrm{shots are H or a M independent of the quarter}$$
+$$H_A: \textrm{whether H or a M depends on which quarter}$$
+We want to see if our **sample data** is consistent with $H_0$
+
+---
+
+Let's look at the cell proportions of the data
+ 
+```{r echo=F}
+mytable <- round(prop.table(contingency_table),3) # cell percentages
+addmargins(mytable)
+```
+
+Marginal for baskets, $P(\textrm{baskets}): {0.436, 0.563}$
+
+for quarters, $P(\textrm{quarters}): {0.270, 0.053, 0.188, 0.255, 0.233}$
+
+So, if the probability of shots hit or miss is independent of the quarter then  we can state the null hypothesis as
+
+$$H_0: P(basket=X \textrm{ AND } quarter = Y) = P(X)P(Y)$$
+
+where $P(X)$, $P(Y)$ are the marginal probabilities for baskets and quarters
+
+---
+
+The expected counts under the null hypothesis can get by multiplying the marginal products times the number of observations ($n=133$)
+
+```{r}
+    P_A <- c(0.437,0.563)
+    P_B <- c(0.270, 0.053, 0.188, 0.255, 0.233)
+    expected_counts <- round((P_A %o% P_B) *133,1) 
+```
+
+```{r echo=F}
+  dimnames(expected_counts) <- list(c("",""),c("","","","",""))
+  expected_counts
+```
+
+Then the test statistic can be determined by summing the differences of the squares divided by the square root of the expected counts. By theory, it should follow a chi squared distribution with degrees of freedom = (number of rows - 1)(number of columns -1) so here $\nu$ = (2-1)*(5-1) = 4
+
+---
+
+Let's check this manually and then see that `chisq.test` produces the same result
+
+```{r}
+
+X_squared = sum((kobes_real_data - expected_counts)^2/expected_counts)
+round(X_squared,2)
+
+chisq.test(kobes_real_data)
+```
+
+---
+
+Graphical plot of the solution
+```{r echo=F}
+curve(dchisq(x,4), xlim=c(0,10), main="Chisq density",xlab='X^2')
+ 
+# define shaded region
+from.z <- 2.39
+to.z <- 10
+ 
+S.x  <- c(from.z, seq(from.z, to.z, 0.01), to.z)
+S.y  <- c(0, dchisq(seq(from.z, to.z, 0.01),4), 0)
+polygon(S.x,S.y, col="black")
+
+from.z <- 0
+to.z <- 2.39
+ 
+S.x  <- c(from.z, seq(from.z, to.z, 0.01), to.z)
+S.y  <- c(0, dchisq(seq(from.z, to.z, 0.01),4), 0)
+polygon(S.x,S.y, col="gray")
+
+```
+
+From $p$-value = 0.66 we can reasonably conclude that kobe's hits and misses were independent of the quarter in the sample data.
+
+## Fisher exact test
+
+Let's say there is a class with 12 women and 12 men and you want to test the hypothesis that the proportion of studying individuals is higher among women than men.
+
+```{r echo = F}
+
+p <- data.frame(Men=c("**1**","**11**","12"),Women=c("**9**","**3**","12"),Row_total=c(10,14,24),row.names = c("**Studying**","**Not-studying**","*Column Total*"))
+
+
+p %>%
+  kable(align=rep('c', 3),col.names = c("**Men**","**Women**","*Row Total*")) %>%
+  kable_styling(full_width=F,font_size = 24)
+```
+
+Assuming the null hypothesis, that men and women are equally likely to study, what is the probability (*p* value) that these 10 studiers would be so unevenly distributed between?
+
+In order to proceed with Fisher test, we introduce notations
+
+---
+
+```{r echo = F}
+
+p <- data.frame(Men=c("**a**","**c**","a+c"),Women=c("**b**","**d**","b+d"),Row_total=c("a+b","c+d","a+b+c+d(=N)"),row.names = c("**Studying**","**Not-studying**","*Column Total*"))
+
+
+p %>%
+  kable(align=rep('c', 3),col.names = c("**Men**","**Women**","*Row Total*")) %>%
+  kable_styling(full_width=F,  font_size = 24)
+```
+
+Fisher showed that the probability is **hypergeometric**
+
+$p = \frac{\binom{a+b}{a}\binom{c+d}{c}}{\binom{N}{a+c}} \qquad \to \qquad p(X;N,K,n)= \frac{\binom{K}{X}\binom{N-K}{n-X}}{\binom{N}{n}}$
+
+where $N$ is the population size (24 students),
+
+$K$ is the number of success states (10 studiers)
+
+$n$ is the number of draws e.g. (draw 12 men)
+
+$X$ is the number of successes, (1 man studies)
+
+---
+
+Remember, p-values refer to the data **OR any more extreme cases against $H_0$** so we should also consider this case as well
+
+```{r echo = F}
+
+p <- data.frame(Men=c("**0**","**12**","12"),Women=c("**10**","**2**","12"),Row_total=c(10,14,24),row.names = c("**Studying**","**Not-studying**","*Column Total*"))
+
+
+p %>%
+  kable(align=rep('c', 3),col.names = c("**Men**","**Women**","*Row Total*")) %>%
+  kable_styling(full_width=F,font_size = 24)
+```
+
+
+`dhyper(1,10,14,12) + dhyper(0,10,14,12) = ` `r dhyper(1,10,14,12)` 
+
+$$p/2 = \frac{{\binom{10}{1}} {\binom{14}{11}}} {\binom{24}{12}} +  \frac{{\binom{10}{0}} {\binom{14}{12}}}  {\binom{24}{12}}  \to p \approx 0.00276$$
+we multiplied by 2, to do a two-tailed test, however, the hypergeometric is not exactly symmetric so this is just an approximation
+
+---
+
+Note that the more extreme tail values are calculated with the same marginals. let's apply fisher test and see if results agree
+
+```{r}
+men_studiers <- data.frame(Men=c(1,11),Women=c(9,3))
+ fisher.test(men_studiers)
+```
+
+## Kolmogorov-Smirnov goodness of fit
+
+This is another goodness of fit test. It compares the empirical cumulative distribution of a sample versus a theoretical CDF OR versus another sample's empirical CDF.
+
+How it works: demonstrate on chalkboard 
+```{r}
+x <- rnorm(50)
+y <- runif(30)
+# Do x and y come from the same distribution?
+ks.test(x, y)
+```
+
+---
+
+for this example, the null hypothesis, $H_0$, states that the two samples $x$ and $y$, come from the same distribution (NOT true)
+
+```{r}
+plot.ecdf(x,main=NULL)
+plot.ecdf(y,add=T,col='blue')
+```
+
+## quantile-quantile (QQ) plots
+
+QQ plots are a way to visually inspect your data to perform inference
+
+* Procedure is to order your data and plot vs normal $k/n$ quantiles or some other distribution/sample on horizontal
+
+* The idea is that if a random sample comes from a distribution then $n$ quantiles of $n$ observed data match should closely follow the $n$ quantiles of the distribution 
+
+* If your sample quantiles plotted against theoretical quantiles **form a straight line**, then it is likely your data belongs to the theoretical distribution (default is normal)
+
+* some of the **far-tail effects** are due to limited sample size
+
+## Normal QQ plot
+
+```{r echo=F}
+par(mar=c(0,0,3,3))
+```
+```{r}
+qqnorm(rnorm(500)) # it's a match! Ignore, the far-tail variance
+```
+
+---
+
+Since the sample data's QQ plot below is not straight line, it is not a match to the normal distribution
+
+```{r}
+qqnorm(rexp(500,rate=1)) # oops
+```
+
+---
+
+You can do a QQ plot with some other type of distribution on the horizontal axis (theoretical quantiles)
+```{r}
+x <- rexp(500,rate=1);   y <- qexp(ppoints(length(x)))
+qqplot(x,y,main="exponential Q-Q plot",xlab="theoretical quantiles") 
+```
+
+---
+
+Here is an example of a **heavy tailed** sample
+```{r}
+y <- rt(600, df = 3)  # t-distribution has fat tails
+```
+<div class="col2">
+```{r echo=F, fig2, fig.width=4}
+plot(seq(-5,5,by=0.1),dt(seq(-5,5,by=0.1),5),ylim=c(0,0.4),type='l',col='black')
+curve(dnorm(x),col='red',add=T)
+```
+<br/>
+<br/>
+```{r echo=F, fig3, fig.width=4}
+qqnorm(y); qqline(y, col = 2)
+```
+
+</div>
+---
+
+Here is an example of a **light** tailed sample
+```{r}
+y <- runif(200); y <- y-mean(y)  # uniform - symmetrized
+```
+
+<div class="col2">
+```{r echo=F, fig5, fig.width=4}
+plot(seq(-3,3,by=0.1),dunif(seq(-3,3,by=0.1),min=-0.5,max=0.5),type='l',col='black')
+curve(dnorm(x),col='red',add=T)
+```
+<br/>
+<br/>
+```{r echo=F, fig6, fig.width=4}
+qqnorm(y); qqline(y, col = 2)
+```
+
+</div>
+
+
+---
+
+Here is an example of a **right-skew**, appears _left-leaning_, but the right tail is longer (heavier), while the left-tail is short (lighter)
+
+```{r}
+y <- rchisq(2000,4); y <- y - mean(y) # symmetrize
+```
+<div class="col2">
+```{r echo=F, fig8, fig.width=4}
+plot(seq(-1,12,by=0.1),dchisq(seq(-1,12,by=0.1),4),type='l',col='black',ylim = c(0,0.5))
+curve(dnorm(x,mean=3),col='red',add=T)
+```
+<br/>
+<br/>
+```{r echo=F, fig9, fig.width=4}
+qqnorm(y); qqline(y, col = 2)
+```
+
+</div>
+---
+
+Here is an example of a **left-skew**, appears _right-leaning_, but the **left** tail is longer (heavier), while the right-tail is short (lighter)
+
+```{r}
+y <- rbeta(2000,8,2) # sample the beta distribution
+```
+
+<div class="col2">
+```{r echo=F, fig11, fig.width=4}
+plot(seq(-0.1,1,by=0.01),dbeta(seq(-0.1,1,by=0.01),3,2)/5,type='l',col='black',ylim = c(0,0.6))
+curve(dnorm(x,0.6,sd=sd(y))/7,col='red',add=T)
+```
+<br/>
+<br/>
+```{r echo=F, fig12, fig.width=4}
+qqnorm(y); qqline(y, col = 2)
+```
+
+</div>
+
+---
+
+You can also use a QQ plot with sample data quantiles on each axis to test if they belong to the same distribution.
+```{r echo=F}
+par(mar=c(0,0,3,3))
+```
+```{r}
+x <- rnorm(300);  y <- runif(100,min=-0.5,max=0.5)
+qqplot(y,x,main="two sample Q-Q plot") # should be heavy tailed
+```
+
+## Testing for differences in means
+
+* Depends on whether your data is **paired** or **unpaired**
+
+* For _paired data_, there is a **one-to-one** correspondence between data points in each sample (column). The hypothesis testing is conducted in the same way as for a single mean test, but replacing $\overline{X}$ with the average of difference column
+
+```{r echo = F}
+dieters <- data.frame(name =c('Cindy','July','Tom','Joe','Ann','Mike'),before_weight=c(145,136,179,162,151,188),after_weight =c(141,131,177,165,143,184),difference = c(4,5,2,-3,8,4))
+dieters %>%
+  kable(align=rep('c', 4)) %>%
+  kable_styling(full_width=F,font_size = 20)
+```
+
+--- 
+
+Note that the null hypothesis, $H_0$ is that the true (population) difference in means is zero, or in other words:
+
+$H_0$: _The diet has no affect on the individuals' weight_ 
+
+To run the paired t-test
+
+```{r}
+t.test(dieters$before_weight,dieters$after_weight,paired = TRUE)
+```
+
+## Unpaired data
+
+the MASS library dataframe `birthwt` contains 189 observations of baby birth weights and associated risk factors shown below
+
+```{r echo=F}
+colnames(birthwt) <- c("birthwt.below.2500", "mother.age", 
+                       "mother.weight", "race", "mother.smokes", 
+                       "previous.prem.labor", "hypertension", 
+                       "uterine.irr", "physician.visits", "birthwt.grams")
+birthwt <- mutate(birthwt, 
+          race = as.factor(mapvalues(race, c(1, 2, 3), 
+                                     c("white","black", "other"))),
+          mother.smokes = as.factor(mapvalues(mother.smokes, 
+                                              c(0,1), c("no", "yes"))),
+          hypertension = as.factor(mapvalues(hypertension, 
+                                             c(0,1), c("no", "yes"))),
+          uterine.irr = as.factor(mapvalues(uterine.irr, 
+                                            c(0,1), c("no", "yes"))),
+          birthwt.below.2500 = as.factor(mapvalues(birthwt.below.2500,
+                                                   c(0,1), c("no", "yes")))
+                  )
+head(select(birthwt,mother.age,mother.weight,race,mother.smokes,birthwt.grams)) %>%
+  kable(align=rep('c', 5),row.names = F) %>%
+  kable_styling(full_width=F,font_size = 18)
+```
+
+We want to test to see if there is a difference between the average birthweights between mothers who smoke and mothers who don't smoke
+
+---
+
+```{r eval=F}
+ddply(birthwt, ~ mother.smokes, summarize, # this splits the data...
+      group.size = length(birthwt.grams),  # ...  by smoking status... 
+      mean.birthwt = mean(birthwt.grams),  # ... and then applies...
+      sd.birthwt = sd(birthwt.grams),      # ... functions to each...
+      se.mean.birthwt = sd.birthwt / sqrt(group.size) #...  group
+      ) 
+```
+
+```{r,echo=F}
+ddply(birthwt, ~ mother.smokes, summarize, # this splits the data...
+      group.size = length(birthwt.grams),  # ...  by smoking status... 
+      mean.birthwt = round(mean(birthwt.grams),1),  # ... and then applies...
+      sd.birthwt = round(sd(birthwt.grams),1),      # ... functions to each group
+      se.mean.birthwt = round(sd.birthwt / sqrt(group.size),1)
+      ) %>% 
+  kable(align=rep('c', 5),row.names = F) %>%
+  kable_styling(full_width=F,font_size = 20)
+```
+
+Notice that the data is _unpaired_ since smokers, and non-smokers are **different** groups of mothers. **A paired t-test would check the difference of two variable means for _the same mother_**.
+
+Next, we setup our hypothesis testing framework -
+
+---
+
+$H_0$: There is no difference in average birth weight for newborns from mothers who did and did not
+smoke, or $\mu_n -\mu_s = 0$, where $\mu_n$ represents non-smoking mothers and $\mu_s$
+represents mothers who smoked.
+
+$H_A$: There is some difference in average newborn weights from mothers who did and did not smoke
+($\mu_n -\mu_s \neq 0$).
+
+We check the two conditions necessary to model the difference in sample means using the
+t-distribution.
+
+1. It is reasonable to assume that observations are **independent**, both
+within and between samples.
+
+2. With both data sets over $n= 30$ observations, it is reasonable to assume **normality** (of the sample means about true means) as long as there are no extreme outliers 
+
+
+---
+
+```{r}
+non_smokers <-   filter(birthwt,mother.smokes == 'no')
+smokers <-   filter(birthwt,mother.smokes == 'yes')
+```
+
+<div class="col2">
+```{r echo =F, fig17,fig.width=4,warning=F,message=F}
+
+#qplot(non_smokers$birthwt.grams,geom='histogram',main='non-smokers',bins=11)
+qqnorm(non_smokers$birthwt.grams)
+```
+
+</br>
+</br>
+
+```{r echo=F, fig18,fig.width=4,,warning=F,message=F}
+
+#qplot(smokers$birthwt.grams,geom='histogram',main='smokers',bins=9)
+qqnorm(smokers$birthwt.grams)
+```
+</div>
+
+Thus normality condition is reasonable no extreme outliers
+
+---
+
+For a single mean $t$-test, the null hypothesis, $H_0$, is that the population mean $\mu=\mu_0$ and the null distribution of $\hat{\mu} = \overline{X}$ is:
+
+$\frac{\overline{X} -\mu_0}{SE} \sim t(n-1)$ where $SE = \frac{S}{\sqrt{n}}$
+
+from $n$ observations. We then calculate a $p$ value from the T-score by finding the tail areas of the t-distribution.
+
+For two-sample unpaired t-test with unequal variances, the "Welch" t-test of $H_0$, says $(\overline{X_1} - \overline{X_2})/SE$ is $t$-distributed with
+
+$SE = \sqrt{\frac{S^2_1}{n_1}+ \frac{S^2_2}{n_2}}$
+
+and the smaller of $n_1 -1$ or $n_2 -1$ is the degrees of freedom. The rest of the procedure to find the $p$ value or confidence interval is identical to previous cases.
+
+---
+
+```{r}
+birthwt.t.test <- t.test(birthwt.grams ~ mother.smokes,data=birthwt)
+birthwt.t.test
+```
+
+note that the result of the t-test is a dataframe
+
+`birthwt.t.test$p.value = ` &nbsp; `r birthwt.t.test$p.value`
+
+This is **significant** at level $\alpha = 0.01$
+
+---
+
+another way to run the t-test
+
+```{r}
+with(birthwt, t.test(x=birthwt.grams[mother.smokes=="no"], 
+                     y=birthwt.grams[mother.smokes=="yes"]))
+```
+
+`with(df, )` specifies the dataframe  from which the function gets data, e.g. it is an alternative to `t.test(x,y,data=df)`. In R, there are many ways to do the same thing!
+
+
+## 2X2 table tests
+
+We can look at things from the contingency table perspective
+
+```{r}
+birthwt_table <- with(birthwt, table(birthwt.below.2500, mother.smokes))
+birthwt_table
+chisq.test(birthwt_table)
+```
+
+---
+
+We can also run fishers test on the birthwt data giving similar results to the chisq test
+
+```{r echo=T}
+fisher.test(birthwt_table) #test for INDEPENDENCE
+```
+
+**Interpretation** The odds of low birth weight are 2.01 times greater when the mother smokes than when the mother does not smoke.
+
+
+
+## Power calculation
+
+Suppose you are conducting a randomized study to see if a new drug (treatment group) is more effective in lowering blood pressure than an old one (control group). 
+
+$$H_0: \mu_{trmt} - \mu_{ctrl} = 0$$
+
+where $\mu_{\_}$ is the true population mean effectiveness of each
+
+Suppose that you have an $n_1 =n_2=100$ patients in a double-blind taking each type of pills and that the standard deviations are estimated from previous studies as $S_1^2 = S_2^2 = 12$mmHg 
+
+$SE = \sqrt{\frac{S^2_1}{n_1}+ \frac{S^2_2}{n_2}} = \sqrt{\frac{12^2}{100}+ \frac{12^2}{100}} \approx 1.70$
+
+---
+
+```{r echo=F}
+par(xaxp  = c(-9, 9, 6))
+plot(seq(-9,9,by=0.05),dnorm(seq(-9,9,by=0.05),mean=0,sd=1.70),ylab='',main='null distribution',type='l',xlab=expression(bar(X)[trmt]~ "-" ~bar(X)[ctrl]),xaxt = "n")
+axis(side = 1, at = c(-9,-6,-3,0,3,6,9), labels = c('-9',-6,-3,0,3,6,9))
+segments(x0=3.33, # Value from x (initial)
+         x1=3.33, # Value to x (final)
+         y0=0, # Value from y (initial)
+         y1=0.15, # Value to y (final)
+         col='red',lty=4,lwd=2)
+segments(x0=-3.33, # Value from x (initial)
+         x1=-3.33, # Value to x (final)
+         y0=0, # Value from y (initial)
+         y1=0.15, # Value to y (final)
+         col='red',lty=4,lwd=2)
+
+text(-6, 0.1, labels=expression('reject' ~ H[0]), col='red',cex=2)
+text(0, 0.1, labels='do NOT', col='red',cex=2)
+text(0, 0.05, labels=expression('reject' ~ H[0]), col='red',cex=2)
+
+text(6, 0.1, labels=expression('reject' ~ H[0]), col='red',cex=2)
+```
+
+At this point if $\overline{X_1} - \overline{X_2} = -3$ this effect would not be detected by the study at $\alpha = 0.05$ level, when $n_1 = n_2 = 100$
+
+--- 
+
+If there is a true effect, the _probability_ that we detect it given the _effect size_, our current sample size and significance level is called the **power** of the test.
+Supposing the **effect size** is 3mmHg, and the effect **is true** e.g. it shifts the null distribution
+
+```{r echo=F}
+par(xaxp  = c(-9, 9, 6))
+par(mar=c(5,0,2,2))
+plot(seq(-9,9,by=0.05),dnorm(seq(-9,9,by=0.05),mean=0,sd=1.70),lwd=2,ylab='',main=NULL,type='l',xlab=expression(bar(X)[trmt]~ "-" ~bar(X)[ctrl]),xaxt = "n")
+axis(side = 1, at = c(-9,-6,-3,0,3,6,9), labels = c('-9',-6,-3,0,3,6,9))
+curve(dnorm(x,mean=-3,sd=1.70),add=T,col='green',lwd=2)
+#abline(v=3.33,col='red',lty=3,lwd=2)
+#abline(v=-3.33,col='red',lty=3,lwd=2)
+segments(x0=3.33, # Value from x (initial)
+         x1=3.33, # Value to x (final)
+         y0=0, # Value from y (initial)
+         y1=0.15, # Value to y (final)
+         col='red',lty=4,lwd=2)
+segments(x0=-3.33, # Value from x (initial)
+         x1=-3.33, # Value to x (final)
+         y0=0, # Value from y (initial)
+         y1=0.15, # Value to y (final)
+         col='red',lty=4,lwd=2)
+text(4, 0.2, labels='null distribution', col='black',cex=1.5)
+text(-7, 0.2, labels='distribution with', col='green',cex=1.5)
+text(-7, 0.17, labels=expression(mu[trmt] ~ - ~  mu[ctrl] ~ '= -3'), col='green',cex=1.5)
+```
+
+---
+
+approximating the $t$ distribution as normal, the probability is the area to the left of -3.33 under the **green** curve given by
+
+$\frac{-3.33 -(-3)}{1.70} = -0.20 \to 0.42$ is the power = 1-$\beta$
+
+we ignore the upper rejection region in the calculation, since in this case you would reject $H_0$ but make the wrong (opposite) conclusion!!
+
+we found that if we have a sample size of 100 in each group, we can
+only detect an effect size of 3 mmHg with probability of 0.42
+
+**This could be a big problem if researchers believe there is a real effect and we just didn't get big enough sample sizes to verify it**. 
+
+Millions are spent developing pharmaceuticals
+
+$\beta$ is the prob of type II error: not rejecting when $H_0$ is false
+
+---
+
+* The most common practice is to identify the sample size where the power is around 80% or 90%. The method is
+
+* given an effect size = 3, and desired power of 80%
+    + calculate the Z-score `qnorm(0.8) = ` `r round(qnorm(0.8),2)`
+    + the rejection region extends $1.96 \times SE$ from the center of the null distribution for
+$\alpha = 0.05$ to form an interval $$0.84 \times SE + 1.96 \times SE = 2.8 \times SE = 3$$
+     $$3 = 2.8  \sqrt{\frac{12^2}{n}+\frac{12^2}{n}}$$
+     $$n \approx 250$$
+
+
+
+## `power.test()` in R
+
+
+```{r}
+library(stats)
+power.t.test(n=100,delta = -3,sd=12,sig.level=0.05,type="two.sample")
+```
+
+---
+
+```{r}
+power.t.test(n=253,delta = -3,sd=12,sig.level=0.05,type="two.sample")
+```
+
+Exactly one of the parameters n, delta, power, sd, and sig.level must be passed as NULL
+that parameter is determined from the others.  NULL must be explicitly passed for some.
+
+---
+
+Notice that if the effect size (delta) is made bigger then the power is greater, if everything else is held fixed
+
+```{r}
+power.t.test(n=253,delta = -4,sd=12,sig.level=0.05,type="two.sample")
+```
+
+---
+
+Notice that if the effect size (delta) is made smaller then the power is smaller, if everything else is held fixed
+
+```{r}
+power.t.test(n=253,delta = -2,sd=12,sig.level=0.05,type="two.sample")
+```
+The smaller the effect size (delta), the bigger you need $n$ to be!!
+
+## ANOVA 
+
+
+ANOVA is a method used when you have more than two groups and you want to compare the means to see if there any differences, you are doing _multiple comparisons_. It's like a more general version of the t-test.
+
+**One-way ANOVA** has one continuous response variable (e.g. Test Score) compared by three or more levels of a **single factor variable** (e.g. Level of Education). Two way anova looks at responses to levels of two factor variables.
+
+**Question: Is there a significant association between race and birthweight?**
+
+$H_0: \mu_1 = \mu_2 = ... = \mu_k$
+
+$H_A$: At least one mean is different.
+
+## Conditions for ANOVA
+
+Generally we must check three conditions on the data before performing ANOVA:
+* the observations are independent within and across groups,
+* the data within each group are nearly normal, and
+* the variability across the groups is about equal.
+
+If these conditions hold you calculate the variance of the group means about the grand mean called the mean squared between groups -$MSG$. You also need a pooled estimate of the variance **within** the groups called mean square error-$MSE$. Then the ratio $\frac{MSG}{MSE}$ is $F$ distributed if the Null hypothesis is true. The $F$ distribution has two parameters $df_G = k-1$ and $df_E = n-k$
+
+note the sum of squared errors shown is related to the $MSE$ by $SSE = df_E MSE$
+
+## `aov()` in R
+
+```{r}
+ddply(birthwt, ~ race, summarize,
+      mean.bwt = mean(birthwt.grams),
+      sd.bwt = sd(birthwt.grams) / sqrt(length(birthwt.grams)))
+```
+
+```{r}
+summary(aov(birthwt.grams ~ race, data = birthwt)) # run anova
+```
+
+
+
+
+## Mann Whitney U (Wilcoxon rank-sum)
+
+The **U statistic** corresponds to the number of wins out of all pairwise contests between two groups. 
+
+* For each observation in one set, count the number of times this first value wins over any observations in the other set (the other value loses if this first is larger). 
+* Count 0.5 for any ties. 
+
+* The sum of wins and ties is U for the first set. 
+
+* U for the other set is the converse. 
+
+The distribution of $U$ under the null hypothesis, is known.
+
+The null hypothesis for the $t$ test is that the two groups have the same population mean, for the wilcox test its different
+
+---
+
+* The null hypothesis of the Wilcoxon test is usually taken as equal medians.
+
+* Another way to think of the null is that the two populations have the same distribution with the same median. 
+
+* If we reject the null, that means we have evidence that one distribution is shifted to the left or right of the other. 
+
+* Since we're assuming our distributions are equal, rejecting the null means we have evidence that the medians of the two populations differ. 
+
+* The R statistical programming environment, which we use to implement the Wilcoxon rank sum test below, refers to this a "location shift". 
+
+* Because wilcox test makes no assumptions such as normality about the distributions, it is called a **_parameter free_** test
+
+---
+
+```{r}
+ wilcox.test(birthwt.grams ~ mother.smokes, data=birthwt, conf.int=T)
+```
+
+The `~` in the expression `birthwt.grams ~ mother.smokes` in R, stands for _modelled as_
+
+`birthwt.grams` is being modelled as a response variable to the factor variable `mother.smokes`
+
+
+
+
+## Lab Unit 7
+
+### Exercise #1 
+
+You should be aware of the condition that expected cell counts must be > 5
+
+What are the expected cell counts in the example below?
+
+Remember running chisq.test(x,p) without p assumes a discrete uniform distribution for the bin population proportions (the p vector is all equal). Run the code below in the console
+
+``` {r eval =F }
+a <- table(sample(1:4,size=16,replace=T))
+a
+chisq.test(a) 
+```
+
+Did you get a warning message?
+
+---
+
+### Exercise #2 
+
+There is an issue with running `chisq.test` on a table with margins.
+
+Run the following code
+
+``` {r eval=F }
+a <- addmargins(table(sample(1:4,size=30,replace=T)))
+a
+chisq.test(a) 
+```
+**it will treat the margin like a bin** checkout that p-value!
+
+Do you understand why the p-value is so small?
+
+---
+
+### exercise 3 
+
+Use fisher.test to see if there is an association in the table below
+
+```{r eval =T}
+smoking <- as.table(rbind(c(688,650),c(21,59)))
+dimnames(smoking) <- list(has.smoked=c("yes","no"),lung.cancer=c("yes","no"))
+smoking
+```
+
+---
+
+### Exercise 4: statistical power
+
+A company that manufactures light bulbs claims that a particular type of light bulb will last 850 hours on average with standard deviation of 50. A consumer protection group thinks that the manufacturer has overestimated the lifespan of their light bulbs by about 40 hours. How many light bulbs does the consumer protection group have to test in order to prove their point with reasonable confidence? 
+
+Hint: use `type="one.sided"` in your power test!
+
+---
+
+### Exercise 5
+
+It has been estimated that the average height of American white male adults is 70 inches. It has also been postulated that there is a positive correlation between height and intelligence. If this is true, then the average height of a white male graduate students on campus should be greater than the average height of American white male adults in general. You want to test this theory out by random sampling a small group of white male graduate students. But you need to know how small the group can be or how few people that you need to measure such that you can still prove your point. 
