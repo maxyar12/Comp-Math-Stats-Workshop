@@ -1,0 +1,397 @@
+---
+title: 'Unit-8b: Data Exploration and Modelling, Part I'
+output: ioslides_presentation
+---
+
+
+
+```{r setup, include=FALSE}
+options(width = 999)
+library('kableExtra')
+library(tidyverse)
+library(GGally)  # additional plotting functions
+library(broom)   # tidy up model output
+knitr::opts_chunk$set(echo = T)
+```
+
+## Agenda
+
+We will follow the example from the UVA statslab, link:
+
+https://uvastatlab.github.io/phdplus/linearmodel.html
+
+1. Load libraries, read in data
+
+2. Before you model, explore
+
+3. Linear model estimation,  inference
+
+4. Model Specification, factors, interactions
+
+5. Model evaluation,  F-tests
+
+
+## Setup
+
+Some packages you will need
+
+```{r eval=F}
+install.packages("tidyverse")
+library(tidyverse)
+library(GGally)  # additional plotting functions
+library(broom)   # tidy up model output
+```
+
+## Exploration dataset: homes
+
+The data is about homes in Albemarle County, VA
+
+```{r echo=F,fig2, fig.align='center'}
+knitr::include_graphics("albemarle_county_VA.png")
+```
+
+
+## Get data from github
+
+```{r results='hide'}
+github_url <-
+"https://github.com/uvastatlab/phdplus/raw/master/data/albemarle_homes.rds"
+homes <- readRDS(url(github_url))
+str(homes)
+```
+
+Take some time to look at and inspect the data
+
+`str(homes)` gives values and types of each variable
+
+`View(homes)` Take some time to view and look at the data
+
+There are 32,746 homes, (rows) in the database
+
+Each row has 26 variables describing features
+
+---
+
+```{r echo=F }
+ head(homes) %>% 
+  kable(align=rep('c', 26),format = "html") %>%
+  kable_styling() %>%
+  kableExtra::scroll_box(width = "100%", height = "500px")
+```
+
+## Real estate terms
+
+* The **"land value"** is the value of the land -- i.e., the physical ground and dirt that makes up the land. 
+
+* The **"improvements value"** is the value of improvements -- an "improvement' usually means a home/house/structure etc 
+
+So, if you own a house for example, the land that the house sits on is the "land value" and the house itself is the "improvement." 
+
+$$\textrm{total value } = \textrm{land value } + \textrm{improvements value }$$
+
+**SIDENOTE**: _Assessment value_ is a somewhat arbitrary figure that your local property tax collector determines and then has a formula to calculate your annual real estate property taxes. The assessment value is usually significantly lower than the TOTAL VALUE but this varies from state to state. 
+
+## Plot improvemnts value vs sqft
+
+```{r }
+plt <- ggplot(homes, aes(x = finsqft, y = improvementsvalue)) 
+plt + geom_point(alpha = 1/10)
+```
+
+
+## Binning data by sq ft
+
+Below, we create some custom bins and add a column to the table indicating what square foot bin each home belongs to
+
+```{r}
+sqft_break <- c(0, 250, 500, 750, 1250, 1500, 1750, 2000, 2250, 
+                2500, 2750, 3000, 3250, 3500, 3750, 4000, 4250, 
+                4500, 4750, 5000, 5250, 5550, 5750, 6000, 6250,
+                6500, 6750, 7000, 7250, 7500, 7750, 8000, Inf)
+homes_tmp <- homes %>% 
+  mutate(sqft_bins = cut(finsqft, breaks = sqft_break)) %>%  # cut 
+  group_by(sqft_bins) %>% 
+  mutate(bin_meany = mean(improvementsvalue),    # mean in bin
+         bin_medx = max(finsqft)) %>%            #
+  ungroup()
+```
+
+
+---
+
+Below is the frequency table for square footage of homes
+
+Examine the frequencies in each bin
+
+```{r eval=F}
+table(round(homes_tmp$bin_medx, 0))
+```
+
+```{r echo =F}
+table(round(homes_tmp$bin_medx, 0))%>% 
+  kable(align=rep('c', 26),col.names=c("bin_right_edge","frequency"), format = "html") %>%
+  kable_styling() %>%
+  kableExtra::scroll_box(width = "100%", height = "350px")
+```
+
+## Plot with bins
+
+```{r }
+p <- ggplot(homes_tmp, aes(x = bin_medx, y = improvementsvalue)) 
+p + geom_point(alpha = 1/10) # all pts have the SAME transparency!
+```
+
+
+##  plot with conditional means
+
+```{r }
+p + geom_point(alpha = 1/10) +  # note I am adding to previous slide's plot!
+  geom_point(aes(x=bin_medx, y=bin_meany), color = "orange", size = 3) 
+```
+
+
+## plot with line connecting means
+```{r }
+p + geom_point(alpha = 1/10) + 
+  geom_point(aes(x=bin_medx,y=bin_meany),color="orange",size=3) +
+  geom_line(aes(x=bin_medx, y=bin_meany), color = "orange")
+```
+
+---
+
+```{r }
+p + geom_point(alpha = 1/10) + 
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + # LR
+  geom_point(aes(x=bin_medx,y=bin_meany),color="orange",size = 3) +
+  geom_line(aes(x = bin_medx, y = bin_meany), color = "orange") 
+```
+
+---
+
+```{r warning=F,message=F}
+ggplot(homes, 
+       aes(y = totalvalue, x = finsqft)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~ city)  # facet by city
+```
+
+## YOUR TURN:
+
+- create a graph of the relatonship between totalvalue and 
+another numeric variable of your choice, faceting by city
+
+
+## Running regressions
+
+```{r}
+fit = lm(improvementsvalue ~ bin_medx, data = homes_tmp)
+homes_tmp$predicted <- predict(fit)   
+homes_tmp$residuals <- residuals(fit) 
+# sample 500 homes
+homes_tmp_samp <- homes_tmp %>% sample_n(size = 500)
+# notice sample_n(df,size) return a dataframe!
+```
+
+plot it
+
+```{r eval=F}
+ggplot(homes_tmp_samp, aes(x = bin_medx, y = improvementsvalue)) +
+  geom_point(aes(color = residuals)) +
+  geom_line(aes(y = predicted)) +
+  geom_segment(aes(xend = bin_medx, yend = predicted)) +
+  scale_color_gradient2(low = "blue", mid = "white", high = "red") +
+  guides(color = FALSE)
+```
+
+(resulting plot is on next slide)
+
+---
+
+```{r echo=F }
+ggplot(homes_tmp_samp, aes(x = bin_medx, y = improvementsvalue)) +
+  geom_point(aes(color = residuals)) +
+  geom_line(aes(y = predicted)) +
+  geom_segment(aes(xend = bin_medx, yend = predicted)) +
+  scale_color_gradient2(low = "blue", mid = "white", high = "red") +
+  guides(color = FALSE)
+```
+
+There are multiple data points in each bin
+
+## Regression results
+
+```{r}
+fit
+```
+
+This tells us that
+
+$$\textrm{improvementsvalue} = -185678.6 + 208\times\textrm{Squarefeet}$$
+
+the intercept is essentially meaningless (why?)
+
+## Multiple regression
+
+
+The basic method in R is `lm(Y ~ X1 + X2, data = mydata)`
+
+```{r}
+multi_fit <- lm(improvementsvalue ~ finsqft + age + lotsize,
+                data=homes)
+```
+
+To get the output run `summary(multi_fit)` 
+
+(results are on next page)
+
+---
+
+```{r echo=F}
+summary(multi_fit)
+```
+
+---
+
+* **Call**: The model formula, useful if result is saved for later
+* **Residuals**: A quick check of the distribution of residuals. Ideally, median is near 0, max and min, and 1Q and 3Q, are approximately equivalent.
+* **Coefficients**:
+* **Estimate**: $\hat{\beta}$
+
+* **Std. error**: standard error of $\hat{\beta}$
+
+* **t value**: test statistic for $H_0: \hat{\beta}=0$ calculated by $\frac{estimate}{SE}$
+
+* **$Pr(>|t|)$**: $p$ value of hypothesis test (two-sided)
+
+* **Signif. codes**: indicate statistical significance
+* **Residual standard error**: $\hat{\sigma}$
+
+---
+
+* **degrees of freedom**: # of obs - # of estimated parameters
+* **Multiple R-squared**: measure of model fit (0,1)
+* **Adjusted R-squared**: measure of model fit adjusted for number of parameters (0,1)
+* **F-statistic**: test statistic for hypothesis that all coefficients (other than intercept) simultaneously equal zero
+* **p-value**: $p$-value for F-statistics
+
+
+## Specifying models
+
+<center>
+`response variable ~ explanatory variables` 
+</center>
+</br>
+The tilde (~) is read as “is modelled as a function of” or “regressed on.” Additional model symbols are include:
+
+    \+ &nbsp;&nbsp;&nbsp;inclusion of variable
+
+    \- &nbsp;&nbsp;&nbsp;exclusion of variable (not subtraction)
+
+    \∗&nbsp;&nbsp;&nbsp; include variables and their interactions
+
+    : &nbsp;&nbsp;&nbsp;interact variables
+
+    ∧ &nbsp;&nbsp;&nbsp;interaction of variables to specified degree (**not an exponent**)
+
+To override a model symbol, use the I() function.
+
+---
+
+
+`y ~ x1 + x2 + x3` &nbsp;&nbsp;&nbsp;(multiple regression)
+
+`y ~ .` &nbsp;&nbsp;&nbsp;(regress y on all variables in data set)
+
+`y ~ x1 + x2 - 1` &nbsp;&nbsp;&nbsp;(exclude intercept)
+
+`y ~ x1 + x2 + x1:x2 `&nbsp;&nbsp;&nbsp;(interact x1 and x2)
+
+`y ~ x1 * x2` &nbsp;&nbsp;&nbsp;(same as above)
+
+`y ~ x1 + x2 + x3 + x1:x2 + x1:x3 + x2:x3 + x1:x2:x3 `&nbsp;&nbsp;&nbsp;(all two and three-way interactions)
+
+`y ~ x1 * x2 * x3` &nbsp;&nbsp;&nbsp;(same as above)
+
+`y ~ (x1 + x2 + x3)ˆ2` &nbsp;&nbsp;&nbsp;(all 2-way interactions)
+
+`y ~ x1 + I(x1ˆ2) + x3` &nbsp;&nbsp;&nbsp;(polynomial regression)
+
+`y ~ poly(x1, 2, raw = TRUE) + x3 ` &nbsp;&nbsp;&nbsp;(polynomial regresion)
+
+
+---
+
+For inclusion in a model, R requires categorical predictors – like city or condition in the Albemarle housing data – to be encoded as factors. 
+
+By default, coefficients for factors are modeled using treatment contrasts – one level is treated as the baseline and the other levels have coefficients that express differences from that baseline. e.g. the effect is like changing the intercept for each city.
+
+```{r echo =F}
+table(homes$city)%>% 
+  kable(align=rep('c', 10), format = "html") %>%
+  kable_styling() %>%
+  kableExtra::scroll_box(width = "100%", height = "200px")
+```
+
+---
+
+```{r}
+multi_factor_fit <- lm(improvementsvalue ~ city + finsqft + age + lotsize, 
+                  data = homes)
+summary(multi_factor_fit)$coefficients
+```
+
+## Diagnostic:check residuals
+
+
+```{r}
+plot(multi_factor_fit, which = 1) 
+```
+
+## Evaluating model specification, fit
+
+What should be included in a model, and in what form, are questions of model specification (aka feature selection).
+
+To test whether inclusion of a subset of variables substantially improves a model, we can use a partial F-test to compare models with and without this subset of variables.
+
+```{r eval=F}
+lm_full <- lm(improvementsvalue ~ city*finsqft + age + lotsize, 
+                  data = homes)
+lm_red <- lm(improvementsvalue ~ city + finsqft + age + lotsize, 
+                  data = homes)
+anova(lm_red, lm_full)
+
+```
+
+---
+
+```{r echo=F}
+lm_full <- lm(improvementsvalue ~ city*finsqft + age + lotsize, 
+                  data = homes)
+lm_red <- lm(improvementsvalue ~ city + finsqft + age + lotsize, 
+                  data = homes)
+anova(lm_red, lm_full)
+```
+
+the null hypothesis is that the models are the same.
+
+clearly, the full model better fits the data
+
+## YOUR TURN: 
+
+- estimate your own model of totalvalue --
+
+-  add at least one predictor, save it as a new model object,
+-  and summarize the model; 
+-  are the newly added variables significantly related?
+-  do the effects of the initially included variables change?
+- try to plot conditionals with confidence and prediction intervals
+
+
+## Additional Exercises Unit 8b
+
+1. For all the homes in Albemarle dataset, calculate the average last sale price, for homes where the last sale price is known.
+
+2. Compare the average sale price to the average total value of all homes
+
+3. Repeat the steps in exercise 1. and 2. but this time, restrict the data to only homes that were sold in year 2000 or later
