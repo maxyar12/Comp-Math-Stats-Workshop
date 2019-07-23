@@ -6,6 +6,9 @@ output: ioslides_presentation
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = T)
 library(ggplot2)
+require(MASS)
+library('plyr')
+require(dplyr)
 ```
 
 
@@ -297,6 +300,33 @@ fit_reduced
 2. $SST$/$SSE_{n-1}$ residuals: distances from data points to dotted line
 
 3. $(SSG/SSR)$ residuals: the difference between modelled and unmodeled, or the  **distance between the solid and dotted lines**
+
+## Factor ANOVA - basically same thing
+
+```{r echo =F}
+colnames(birthwt) <- c("birthwt.below.2500", "mother.age", 
+                       "mother.weight", "race", "mother.smokes", 
+                       "previous.prem.labor", "hypertension", 
+                       "uterine.irr", "physician.visits", "birthwt.grams")
+birthwt <- mutate(birthwt, 
+          race = as.factor(mapvalues(race, c(1, 2, 3), 
+                                     c("white","black", "other"))),
+          mother.smokes = as.factor(mapvalues(mother.smokes, 
+                                              c(0,1), c("no", "yes"))),
+          hypertension = as.factor(mapvalues(hypertension, 
+                                             c(0,1), c("no", "yes"))),
+          uterine.irr = as.factor(mapvalues(uterine.irr, 
+                                            c(0,1), c("no", "yes"))),
+          birthwt.below.2500 = as.factor(mapvalues(birthwt.below.2500,
+                                                   c(0,1), c("no", "yes")))
+                  )
+reg<-lm(birthwt.grams ~ race, data = birthwt)
+sp <- ggplot(data=birthwt, aes(x=race, y=birthwt.grams)) + geom_point()
+sp + geom_hline(yintercept=c(mean(birthwt$birthwt.grams),2719,2805,3102),linetype=c("dashed","solid","solid","solid"))  # better to do with geom segment
+
+```
+
+
 
 ## Prediction Interval
 
