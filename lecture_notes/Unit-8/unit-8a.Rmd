@@ -1,0 +1,426 @@
+---
+title: "Unit 8a - linear regression"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T)
+library(ggplot2)
+```
+
+
+## Agenda
+
+- Unit 8a linear regression 
+
+- Unit 8b: start applying what we learned to **explore data** 
+
+- Bootstrap methods
+
+- lab unit 8
+
+- Last two classes July 30/Aug 6
+    - 
+    - Clustering methods
+    - Network/Graph theory and applied problems
+    - image recognition 
+    - ? Pizza party ?
+
+##  Least Squares Linear Regression
+
+The idea is that given $n$ data points 
+
+$\{(x_1,y_1),(x_2,y_2),...,(x_n,y_n)\}$
+
+
+we want to **best fit model** the data as lying on some line
+
+$$ \hat{y} = \beta_0 + \beta_1 x $$
+
+data points won't lie exactly on a line so we define residuals
+
+$$y_i - \hat{y}_i = \epsilon_i \qquad \textrm{so} \qquad y = \beta_0 + \beta_1 x + \epsilon$$
+$$\textrm{Data} = \textrm{Fit} + \textrm{Residual}$$
+
+least squares regression minimizes sum of squared residuals
+
+## Different way of thinking
+
+* You may be used to thinking of $x$ and $y$ as random variables
+
+* here in linear regression, **Data = Fit + Randomness** 
+
+* Here, **$x$, is fixed data (not a random variable)** whereas the residuals are where the randomness lies
+
+*  $y$ is a random variable ONLY through $\epsilon$, $\textrm{Var}(y)=\textrm{Var}(\epsilon)$
+
+* We assume **normal residuals**  $\epsilon_i \sim N(0,\sigma^2)$
+
+* usually we don't know $\sigma^2$. It is estimated from data 
+
+$$\hat{\sigma}^2 = \frac{1}{n-2}\sum_i (y_i-\hat{y})^2 = \frac{1}{n-2}\sum_i \epsilon_i^2$$
+
+---
+
+The values $\beta_0$, $\beta_1$ that minimize the residuals are
+
+$\hat{\beta_0} = \overline{y} - \hat{\beta_1} \overline{x}$
+
+$\hat{\beta_1} = \frac{s_y}{s_x}R = \frac{\textrm{Cov}(xy)}{s_x^2}$
+
+where the correlation and _**sample** covariance_ are
+
+$R = \frac{\textrm{Cov}(xy)}{s_xs_y}$ 
+
+$\textrm{Cov}(xy) = \frac{1}{n-1}\sum_i (x_i -\overline{x})(y_i - \overline{y})$
+
+Correlation, $R$, measures linear relationship on scale -1 to +1
+
+ _correlation coefficient_, $R^2$ instead of $R$ sometimes also used
+
+
+
+## Conditions on doing LSLR
+
+1. **Linearity**  The data when plotted should show a linear trend, if not, you will need a more advanced method!!
+
+2. **normal residuals** You can't have any crazy outliers
+
+3. **homoscedasticity of residuals** The variance of the residuals must be a constant 
+
+4. **Independence** The observations must be independent. Time series is often has data strongly correlated to previous
+
+
+```{r echo=F,fig2, fig.align='center'}
+knitr::include_graphics("LR_conditions.png")
+```
+
+##  Inference for LR
+
+```{r}
+      x = 1:50    # Notice X is fixed (NOT RANDOM VARIABLE)
+      y = x + rnorm(50,sd=15)  
+```
+
+```{r echo=F, fig3, fig.align='center',fig.asp=0.6}
+      par(mar=c(5,5,0,0))
+      plot(x,y)
+```
+
+---
+
+We think about our $n$ samples as being drawn from a population which is perfectly described by the model
+
+$H_0$: the _population_ slope $\beta_1 = 0$
+
+$H_A$: the _population_ slope $\beta_1 \neq 0$
+
+The null hypothesis says:
+
+_**There is no linear relationship between the dependent response, y, and the explanatory variable, x**_
+
+To assess the hypotheses, we identify a standard error for the point estimate,
+compute a test statistic, and get p-value
+
+$\hat{\beta_1} = \frac{\textrm{Cov}(xy)}{s_x^2}$ is a **point estimate** for the population slope $\beta_1$ 
+
+---
+
+
+Since our estimate for the population slope is a **_statistic_** that means it has some **sampling distribution**
+
+$\frac{ \hat{\beta_1} - \beta_1}{SE} \sim  \textrm{normal or t-distribution}$, but what is $SE$?
+
+
+$\textrm{Var}(\hat{\beta_1}) = \textrm{Var}\left(\frac{\textrm{Cov}(xy)}{s_x^2}\right) = \textrm{Var}\left(\frac{\sum_i (x_i -\overline{x})(y_i - \overline{y})}{\sum_i (x_i -\overline{x})^2}\right)$
+
+Note that $\sum_i(x_i -\overline{x})\overline{y} = 0$ so
+
+$\textrm{Var}(\hat{\beta_1}) = \textrm{Var}\left(\frac{\sum_i (x_i -\overline{x})y_i}{\sum_i (x_i -\overline{x})^2}\right) =\textrm{Var}\left(\frac{\sum_i (x_i -\overline{x})(\beta_1x_i + \beta_0 + \epsilon_i)}{\sum_i (x_i -\overline{x})^2}\right)$
+
+take the attitude that only $\epsilon_i$ is a random variable and the data $x$ are fixed, This is a bit _**counterintuitive**_ since we are computing $s_x$ on the data - but bear with it - $x$ is NOT a random variable!
+
+---
+
+then since the variance of constants is zero,
+
+$\textrm{Var}(\hat{\beta_1}) = \textrm{Var}\left(\frac{\sum_i (x_i -\overline{x})\epsilon_i}{\sum_i (x_i -\overline{x})^2}\right)$
+
+again use $\textrm{Var(kZ)} = k^2\textrm{Var(Z)}$ to get $\textrm{Var}(\hat{\beta_1}) = \frac{\sigma^2}{\sum_i (x_i -\overline{x})^2}$
+
+or $SE = \frac{\sigma}{\sqrt{\sum_i (x_i -\overline{x})^2}} = \frac{\sigma}{s_x\sqrt{n-1}}$
+
+when estimating the population variance of the residuals is
+
+$SE = \sqrt{\frac{1}{n-2} \frac{\sum_i\epsilon_i}{\sum_i(x_i-\overline{x})^2}}$
+
+that was rough!
+
+---
+
+* Since we will estimate $\sigma^2$ from the data we will say that our sample statistic should be $t$ distributed instead of normal
+
+
+* The test statistic t is equal to $\frac{\hat{\beta_1}-0}{SE} =\frac{\hat{\beta_1}}{\sqrt{\frac{1}{n-2} \frac{\sum_i\epsilon_i}{\sum_i(x_i-\overline{x})^2}}}$
+
+```{r}
+      t_statistics <- vector()
+      x = 1:50    
+  for (m in 1:10000) {
+      population_slope = 1  #could set to any number (including 0)
+      y = population_slope*x + rnorm(50,sd=15)
+      hat_beta_1 = cov(x,y)/cov(x,x)
+      hat_beta_0 = mean(y) - hat_beta_1*mean(x)
+      SE = sqrt((1.0/48)*sum((y-(hat_beta_0+hat_beta_1*x))^2)
+                /sum((x-mean(x))^2))
+      t_statistics[m] = (hat_beta_1-population_slope)/SE
+  }
+
+```
+
+---
+
+The takeaway is that when we use this weird definition of the SE, we get a sampling distribution for the slope, $\hat{\beta_1}$ that works!
+
+```{r echo=F}
+hist(t_statistics,freq=F,breaks=37,prob=TRUE,xlab='t',ylim = c(0, 0.5),xlim = c(-5, 5),ylab=NULL,main=NULL)
+curve(dnorm(x), 
+      col="red", lwd=2, add=TRUE, yaxt="n")
+curve(dt(x,48), 
+      col="blue", lwd=2, add=TRUE, yaxt="n")
+```
+
+
+## running `lm` in R
+
+We don't need to do all this math, we can just run linear models in R
+
+```{r}
+lm(y ~ x)
+```
+
+
+* side note: the null hypothesis for $\hat{\beta}_0$ is usually also that the population intercept $\beta_0 = 0$. So a large $p$ value for the intercept for our simulated model would make sense.
+
+---
+
+```{r}
+summary(lm(y ~ x))
+```
+
+
+---
+
+```{r}
+      x = 1:50    # Notice X is fixed (NOT RANDOM VARIABLE)
+      y = x + rnorm(50,sd=15)  
+      fit = lm(y~x)
+```
+
+```{r echo=F, fig4, fig.align='center',fig.asp=0.6}
+      par(mar=c(2,5,0,0))
+      plot(x,y)
+      abline(a=fit$coefficients[1],b=fit$coefficients[2])
+```
+
+
+---
+
+* This gives us confidence intervals for population parameters based on point estimates with the usual approach: 
+
+  $\textrm{CI } = \textrm{point estimate} \pm t^*_{df}SE$
+
+* note that the standard error of $\hat{\beta}_0$ can be easily determined from $\hat{\beta_0} = \overline{y} - \hat{\beta_1} \overline{x} \to SE_{\hat{\beta_0}} = \sqrt{ \frac{\hat{\sigma}^2}{n} +(-\overline{x})^2SE^2_{\hat{\beta_1}}}$
+
+* The report of the $F$ statistic can be understood in terms of the full and reduced model, where $\hat{\beta_1} =0$
+
+* You can think of the residuals as having model components and then errors within the model
+
+* Let's try to **fully** understand the connection between ANOVA and linear regression
+
+---
+
+$$SSE_{n-2} = \sum_i (y_i-\hat{y})^2 = \sum_i \epsilon_i^2$$
+
+where $$\hat{y} = \hat{\beta_0} +\hat{\beta_1}x = \overline{y} - \hat{\beta_1}( \overline{x}-x) = \overline{y} -\frac{\textrm{Cov}(xy)}{s_x^2} (\overline{x}-x)$$
+
+$SSE_{n-2} = \sum_i (y_i-\hat{\beta_0} -\hat{\beta_1}x)^2 =$
+
+$\sum_i (y_i-\overline{y} +\frac{\textrm{Cov}(xy)}{s_x^2} (\overline{x}-x))^2$
+
+
+For the 1 parameter model, with $\hat{\beta_1} = 0$,
+
+$SSE_{n-1} =\sum_i (y_i-\hat{y})^2 = \sum_i (y_i-\overline{y})^2$
+
+--- 
+
+$F= \frac{SSE_{n-1}-SSE_{n-2}}{(n-1)-(n-2)} \div \frac{SSE}{n-2} \sim \frac{SSR}{SSE}$
+
+residuals **always be larger or the same** in reduced model (why?)
+numerator tells us how much variance explained by model
+
+$F \sim \frac{SSG}{SSE} = \frac{SST-SSE}{SSE}$
+
+ANOVA compare grouped factor model SSE to ungrouped SST
+LR, compare modelled 2-param $SSE_{n-2}$ to $SSE_{n-1}$
+
+Linear Regression: $$SSE_{n-1} = SSE_{n-2} + SSR$$  
+
+ANOVA: $$SST = SSE + SSG$$
+
+## Reduced model
+
+For the 1 parameter model, with $\hat{\beta_1} = 0$, $y= \overline{y} + \epsilon$
+
+```{r}
+fit_reduced = lm(y ~ 1)  # y = mean(y) + noise
+```
+
+```{r echo=F}
+fit_reduced
+```
+
+## Reduced and full models
+
+```{r echo=F}
+      par(mar=c(2,5,0,0))
+      plot(x,y)
+      abline(a=fit$coefficients[1],b=fit$coefficients[2])
+      abline(a=fit_reduced$coefficients[1], b = 0,lty=3)
+```
+
+## Graphical interpretation
+
+1. $SSE_{n-2}$ residuals: distances from data points to solid line 
+
+2. $SST$/$SSE_{n-1}$ residuals: distances from data points to dotted line
+
+3. $(SSG/SSR)$ residuals: the difference between modelled and unmodeled, or the  **distance between the solid and dotted lines**
+
+## Prediction Interval
+
+Let's say we fit our model on the data $x$ and $y$
+
+If we are given a new value of $x$, call it $x^*$, the pt est for y is
+
+$$\hat{y}^* = \hat{\beta}_0 + \hat{\beta}_1x^*$$
+with **prediction interval**
+
+$\textrm{point estimate } \pm t^*_{df}\hat{\sigma}\sqrt{1+\frac{1}{n} + \frac{(x^*-\overline{x})^2}{\sum_i (x_i -\overline{x})^2}}$
+
+The last term in square root reflects that we are less confident the farther away $x^*$ is from $\overline{x}$
+
+Note that prediction intervals don't go to zero as $n \to \infty$ (whereas CIs do!) there is always underlying uncertainty!
+
+
+## Confidence interval for mean response
+
+Say we want an interval for the average of the response, $\textrm{E}(\hat{y}^*)$, to some new data $x^*$, the point estimate is the same as before, but now the confidence interval is
+
+
+$\textrm{point estimate } \pm t^*_{df}\hat{\sigma}\sqrt{\frac{1}{n} + \frac{(x^*-\overline{x})^2}{\sum_i (x_i -\overline{x})^2}}$
+
+* Note that the interval is bigger the farther you are away from the center, $\overline{x}$
+
+* In general, linear regression is kind of centered about $\overline{x}$,$\overline{y}$ so if you go away, you lose confidence
+
+* This is reflected in the wedge shape on the plot (Next Page)
+
+
+---
+
+```{r warning=F, echo=F}
+temp_var <- predict(fit, interval="prediction")
+ggplot(cbind(data.frame(cbind(x,y), temp_var)), aes(x,y))+
+    geom_point() +
+    geom_line(aes(y=lwr), color = "red", linetype = "dashed")+
+    geom_line(aes(y=upr), color = "red", linetype = "dashed")+
+    geom_smooth(method=lm, se=TRUE)
+```
+
+Notice how the prediction interval is alot larger than the confidence interval, because the prediction interval retains the effect of the residuals
+
+## Prediction accuracy
+
+It's possible to save some of your data for testing purposes.
+
+```{r}
+x = 1:1000
+y = x + rnorm(1000,sd=50)
+model_x = x[1:800]
+model_y = y[1:800]
+test_x = x[801:1000]
+test_y = y[801:1000]
+model_dat = data.frame(x=model_x,y=model_y)
+test_dat = data.frame(x=test_x,y=test_y)
+fit = lm(y ~ x,data=model_dat)
+pred <- predict(fit,test_dat)
+cor(test_y,pred)
+
+
+```
+
+---
+
+Min max accuracy and   % difference (absolute relative)
+
+```{r}
+actuals_pred <-  data.frame(cbind(test_y,pred))
+mean(apply(actuals_pred, 1, min) / apply(actuals_pred, 1, max))  
+mean(abs((pred - test_y))/test_y)
+
+```
+
+## $k$ fold cross-validation
+```{r echo=F,message=F,warning=F,results='hide'}
+x = 1:25
+y = x + rnorm(25,sd=10)
+my_dat <-  data.frame(cbind(x,y))
+require('DAAG')
+cv_results <- CVlm(data=my_dat,form.lm= y ~ x,m=5,dots=FALSE,
+              legend.pos="topleft",plotit=F,printit=T)
+
+```
+1. Partition the data in $k$ sets randomly
+
+2. choosing the test set to be one of these sets
+
+3. Fits the model on the rest
+
+4. The average of the squares of residuals for different partiononings is recorded (MSE)
+```{r eval=F}
+x = 1:25
+y = x + rnorm(25,sd=10)
+require('DAAG')
+cv_results <- CVlm(data=my_dat,form.lm= y ~ x,m=5)
+```
+```{r }
+attr(cv_results, 'ms')
+```
+
+
+---
+
+```{r warning=F,results=F}
+cv_results <- CVlm(data=my_dat,form.lm= y ~ x,m=5,dots=FALSE,
+              legend.pos="topleft",plotit='Observed',printit=F)
+```
+
+
+## Multivariate LR
+
+$$y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \epsilon$$
+
+* model your data as lying on a _plane_ 
+
+* find parameters of _plane of best fit_, $\beta = (\beta_0,\beta_1,\beta_2)$
+
+* linear regression can include non-linearities in the features. The linearity requirement is for the coefficients
+
+* We won't get into the theory/math of multivariate regression, but all the same stuff you did before you can also do with multiple covariates and also with factors as well!!
+
+We will now start doing some examples on real data, since it's **really about time we started applying things we have learned**
+
+
+
