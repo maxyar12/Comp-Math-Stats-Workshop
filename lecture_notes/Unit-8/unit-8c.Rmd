@@ -1,0 +1,685 @@
+---
+title: 'Unit-8c: linear modelling wrap-up'
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library('tidyverse')
+library('kableExtra')
+```
+
+## Agenda
+
+* details of categorical predictors
+
+* Variable Selection and Model Building
+
+* Exercises
+
+
+## Two Level Categoricals
+
+**data**: 143 auction final sale prices of _Markokart_ on ebay
+
+```{r}
+data_url <- "https://www.openintro.org/stat/data/rda/mariokart.rda"
+load(url(data_url))
+```
+
+```{r echo=F }
+mariokart <- filter(mariokart,total_pr < 100)
+ head(select(mariokart,cond,total_pr)) %>% 
+  kable(align=rep('c', 26),format = "html") %>%
+  kable_styling() %>%
+  kableExtra::scroll_box(width = "100%", height = "300px")
+```
+
+
+---
+```{r echo=F}
+mariokart$cond = factor(mariokart$cond,levels(mariokart$cond)[c(2,1)])
+```
+
+```{r}
+p=qplot(cond,total_pr,data=mariokart,size=I(3),alpha=0.5,colour=4)
+p+theme(legend.position = "none")
+```
+
+---
+
+* To do regression equation, we must convert the categories into a numerical form. 
+
+* We will do so using an indicator variable called `cond_new`, which takes value 1 when the game is new and 0 when the game is used. 
+
+Then linear model may be written as
+$$\widehat{\textrm{price}}=\beta_0 + \beta_1 \times  \text{cond_new}$$
+
+The R code to achieve this is quite instructive
+
+```{r}
+mariokart <- mutate(mariokart,cond_new=as.integer(cond=="new"))
+```
+
+Now we are ready to run our linear regression
+
+---
+
+
+```{r eval=F}
+lm(total_pr ~ cond_new,data=mariokart)
+```
+
+
+```{r echo=F}
+summary(lm(total_pr ~ cond_new,data=mariokart))$coefficients
+```
+
+$$\widehat{\textrm{price}}=42.87 + 10.9 \times  \text{cond_new}$$
+
+* The estimated intercept is the value of the response variable for the first category (i.e. the
+category corresponding to an indicator value of 0). 
+
+* The estimated slope is the average change in the response variable between the two categories.
+
+* Essentially, all we did was **connect the means** of the two groups with a line, (same as an anova)
+
+
+---
+
+```{r}
+p <- ggplot(mariokart, aes(x = cond_new, y = total_pr))
+p + geom_point(alpha = 5/10,size=3,colour=4) + 
+  geom_smooth(method = "lm", se = FALSE, color = "blue")
+```
+
+## Numerical + categorical
+
+**data**: We will look at the `mtcars` dataset
+
+**predictors**: `mpg`, `hp` and `am`
+
+* `mpg`: fuel efficiency, in miles per gallon
+
+* `hp`: horsepower, in foot-pounds per second
+
+* `am`: transmission. Automatic or manual.
+
+First let's just look at the model
+
+$$Y = \beta_0 + \beta_1 x_1 + \epsilon$$
+
+where $x_1$ is horsepower and $Y$ is fuel efficiency
+
+
+---
+
+```{r}
+mpg_hp_slr = lm(mpg ~ hp, data = mtcars)
+```
+```{r echo=F,results='hide'}
+mpg_hp_slr$coefficients
+```
+```{r echo=F}
+#par(mar=c(0,0,2,4))
+
+par(mar=c(5,5,0,0))
+
+plot(mpg ~ hp, data = mtcars, col = am + 1, pch = am + 1, cex = 2)
+abline(mpg_hp_slr, lwd = 3, col = "grey")
+legend("topright", c("Automatic", "Manual"), col = c(1, 2), pch = c(1, 2))
+text(250, 28, labels=expression( beta[1]~ "= -0.068"),cex=1.5)
+text(250, 25, labels=expression( beta[0]~ "= 30.1"),cex=1.5)
+
+```
+
+Notice there is a systematic issue with circles and triangles
+
+---
+
+let's try
+
+$$Y = \beta_0 + \beta_1 x_1 +\beta_2 x_2 + \epsilon$$
+
+where $x_2 =0$ if automatic and $x_2 =1$ if manual transmission
+
+notice this effectively creates two models. When $x_2=0$,
+
+$$Y = \beta_0 + \beta_1 x_1 \epsilon$$
+
+and when $x_2 =1$,
+
+$$Y = (\beta_0 +\beta_2) + \beta_1 x_1 +\epsilon$$
+The models will have same slope (parallel), different intercepts
+
+```{r}
+mpg_hp_add = lm(mpg ~ hp + am, data = mtcars)
+```
+
+---
+
+```{r}
+mpg_hp_add$coefficients
+```
+
+```{r echo=F}
+int_auto = coef(mpg_hp_add)[1]
+int_manu = coef(mpg_hp_add)[1] + coef(mpg_hp_add)[3]
+
+par(mar=c(5,5,0,0))
+slope_auto = coef(mpg_hp_add)[2]
+slope_manu = coef(mpg_hp_add)[2]
+plot(mpg ~ hp, data = mtcars, col = am + 1, pch = am + 1, cex = 2)
+abline(int_auto, slope_auto, col = 1, lty = 1, lwd = 2) # add line for auto
+abline(int_manu, slope_manu, col = 2, lty = 2, lwd = 2) # add line for manual
+legend("topright", c("Automatic", "Manual"), col = c(1, 2), pch = c(1, 2))
+```
+
+## Numerical-Categorical interaction
+
+To remove the “same slope” restriction, we discuss interaction
+
+**predictors**: `mpg`, `hp` and `am`
+
+* $Y$ is `mpg`: fuel efficiency, in miles per gallon
+
+* $x_1$ is `disp`: the displacement in cubic inches,
+
+* $x_2$ is `domestic`: an indicator variable domestic or foreign make
+
+The non-interacting model is:
+
+$$Y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \epsilon$$
+
+---
+
+```{r echo=F}
+# read data frame from the web
+autompg = read.table(
+  "http://archive.ics.uci.edu/ml/machine-learning-databases/auto-mpg/auto-mpg.data",
+  quote = "\"",
+  comment.char = "",
+  stringsAsFactors = FALSE)
+# give the dataframe headers
+colnames(autompg) = c("mpg", "cyl", "disp", "hp", "wt", "acc", "year", "origin", "name")
+# remove missing data, which is stored as "?"
+autompg = subset(autompg, autompg$hp != "?")
+# remove the plymouth reliant, as it causes some issues
+autompg = subset(autompg, autompg$name != "plymouth reliant")
+# give the dataset row names, based on the engine, year and name
+rownames(autompg) = paste(autompg$cyl, "cylinder", autompg$year, autompg$name)
+# remove the variable for name
+autompg = subset(autompg, select = c("mpg", "cyl", "disp", "hp", "wt", "acc", "year", "origin"))
+# change horsepower from character to numeric
+autompg$hp = as.numeric(autompg$hp)
+# create a dummary variable for foreign vs domestic cars. domestic = 1.
+autompg$domestic = as.numeric(autompg$origin == 1)
+# remove 3 and 5 cylinder cars (which are very rare.)
+autompg = autompg[autompg$cyl != 5,]
+autompg = autompg[autompg$cyl != 3,]
+# the following line would verify the remaining cylinder possibilities are 4, 6, 8
+#unique(autompg$cyl)
+# change cyl to a factor variable
+autompg$cyl = as.factor(autompg$cyl)
+mpg_disp_add = lm(mpg ~ disp + domestic, data = autompg)
+
+
+int_for = coef(mpg_disp_add)[1]
+int_dom = coef(mpg_disp_add)[1] + coef(mpg_disp_add)[3]
+
+
+slope_for = coef(mpg_disp_add)[2]
+slope_dom = coef(mpg_disp_add)[2]
+
+par(mar=c(4,4,4,4))
+plot(mpg ~ disp, data = autompg, col = domestic + 1, pch = domestic + 1)
+abline(int_for, slope_for, col = 1, lty = 1, lwd = 2) # add line for foreign cars
+abline(int_dom, slope_dom, col = 2, lty = 2, lwd = 2) # add line for domestic cars
+legend("topright", c("Foreign", "Domestic"), pch = c(1, 2), col = c(1, 2))
+```
+
+the issue is that the fit is ok for the red, not great for black
+
+---
+
+we would like a model that allows for two different slopes
+
+$$Y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3x_1x_2+\epsilon$$
+
+ this creates two sub-models with **different slopes**. 
+ 
+ When $x_2=0$, (foreign cars)
+
+$$Y = \beta_0 + \beta_1 x_1 + \epsilon$$
+
+and when $x_2 =1$ (domestic cars),
+
+$$Y = (\beta_0 +\beta_2) + (\beta_1+\beta_3) x_1 + \epsilon$$
+
+
+```{r}
+mpg_disp_int = lm(mpg ~ disp + domestic+disp:domestic, data = autompg)
+```
+
+---
+
+```{r echo=F}
+int_for = coef(mpg_disp_int)[1]
+int_dom = coef(mpg_disp_int)[1] + coef(mpg_disp_int)[3]
+
+
+slope_for = coef(mpg_disp_int)[2]
+slope_dom = coef(mpg_disp_int)[2] + coef(mpg_disp_int)[4]
+plot(mpg ~ disp, data = autompg, col = domestic + 1, pch = domestic + 1)
+abline(int_for, slope_for, col = 1, lty = 1, lwd = 2) # line for foreign cars
+abline(int_dom, slope_dom, col = 2, lty = 2, lwd = 2) # line for domestic cars
+legend("topright", c("Foreign", "Domestic"), pch = c(1, 2), col = c(1, 2))
+
+```
+
+---
+
+* In general, you can have factors (categorical predictors) with multiple levels, as well as numerical-numerical interactions
+
+* Multiple levels can be treated with multiple indicator variables
+
+* To learn more about this check out
+
+https://daviddalpiaz.github.io/appliedstats/categorical-predictors-and-interactions.html#factor-variables
+
+## Exact Collinearity
+```{r}
+gen_exact_collin_data = function(num_samples = 100) {
+  x1 = rnorm(n = num_samples, mean = 80, sd = 10)
+  x2 = rnorm(n = num_samples, mean = 70, sd = 5)
+  x3 = 2 * x1 + 4 * x2 + 3
+  y = 3 + x1 + x2 + rnorm(n = num_samples, mean = 0, sd = 1)
+  data.frame(y, x1, x2, x3)
+}
+exact_collin_data = gen_exact_collin_data()
+```
+```{r echo=F}
+head(exact_collin_data)
+```
+
+
+---
+
+$x_1, x_2, x_3$ are not linearly ind, so Cov matrix is singular
+
+```{r error=T}
+X = cbind(1, as.matrix(exact_collin_data[,-1]))
+solve(t(X) %*% X)
+lm(y ~ . , data=exact_collin_data)
+```
+
+
+
+---
+
+* Note that linear independence is not exactly the same thing as correlation
+
+* However, to get an idea of collinearity you can examine the correlations, and this is usually an indicator of collinearity
+
+* You can use the `cov()` and `cor()` functions in R to see the (symmetric) matrices
+
+```{r echo=F}
+X <- X[2:4,2:4]
+```
+```{r error=T}
+round(cor(X),3) 
+```
+
+---
+
+You can check for correlations between variables with `pairs`
+
+```{r message=F,warning=F}
+pairs(exact_collin_data, col = "dodgerblue")
+```
+
+---
+
+
+The estimator for the $\beta$ vector is
+
+$$\hat{\beta} = (X^TX)^{-1}X^Ty$$
+
+* Typically some variables will be approximately collinear but not exactly
+
+* Collinearity results in higher variance in the estimator $\hat{\beta}$ but the same point estimates
+
+* Collinearity does not affect prediction errors, but does affect explanatory error
+
+* That is collinearity increases $\textrm{Var}(\hat{\beta})$ but does not increase the $MSE$
+
+* Collinearity will affect your model's ability to **explain things**
+
+
+## Quality Criterion
+
+Impossible to add a predictor and make $R^2$ or $RMSE$ worse
+
+But too many parameters is also a bad thing
+
+**Reminder of Notations**:
+
+$\textrm{RMSE} = \sqrt{\frac{1}{n}\sum (y_i -\hat{y}_i)^2}$
+
+$R^2 = 1 - \frac{RSS}{SST}$
+
+
+$SST = \sum (y_i -\overline{y})^2$ &nbsp;&nbsp; _total sum of squares_  (AKA $SS_{tot}$)
+
+$SSG = \sum (\hat{y}_i -\overline{y})^2$ &nbsp;&nbsp; _explained sum of squares_  (AKA $SS_{reg}$)
+
+$RSS = \sum (y_i -\hat{y}_i)^2$ &nbsp;&nbsp; _residual sum of squares_  (AKA $SS_{res}$)
+
+---
+
+The Akaike information criteria (AIC) is
+
+$$\textrm{AIC} = n\log\left(\frac{RSS}{n} \right) + 2p$$
+
+* Reflects the tradeoff between reduced error (RSS) and increasing the number of parameters, $p$
+
+* If AIC is smaller, then you have a **better** model 
+
+The adjusted $R^2_a$ similarly adds a penalty on number of parameters
+
+
+$R^2_a = 1- \frac{n-1}{n-p}(1 - R^2)$
+
+* like $R^2$, for adjusted, larger is still better
+
+## Cross-Validated RMSE
+
+```{r}
+make_poly_data = function(sample_size = 11) {
+  x = seq(0, 10)
+  y = 3 + x + 4 * x ^ 2 + rnorm(n = sample_size, mean = 0, sd = 20)
+  data.frame(x, y)
+}
+set.seed(1234)
+poly_data = make_poly_data()
+```
+
+Here we have generated data where the mean of $Y$ is a quadratic function of a single predictor 
+$x$, specifically,
+
+$$Y=3+x+4x^2+ϵ$$
+``` {r}
+fit_quad = lm(y ~ poly(x, degree = 2), data = poly_data)
+fit_big  = lm(y ~ poly(x, degree = 8), data = poly_data)
+```
+
+---
+
+```{r echo=F}
+par(mar=c(3,5,0,0))
+plot(y ~ x, data = poly_data, ylim = c(-100, 400), cex = 2, pch = 20)
+xplot = seq(0, 10, by = 0.1)
+lines(xplot, predict(fit_quad, newdata = data.frame(x = xplot)),
+      col = "dodgerblue", lwd = 2, lty = 1)
+lines(xplot, predict(fit_big, newdata = data.frame(x = xplot)),
+      col = "darkorange", lwd = 2, lty = 2)
+
+```
+
+
+The dashed orange curve fits the points better, making smaller errors, however it is fitting the random noise. This is **overfitting**.
+
+---
+
+```{r}
+sqrt(mean(resid(fit_quad) ^ 2))
+sqrt(mean(resid(fit_big) ^ 2))
+```
+
+overfitting is usually controlled by looking at cross-validation error, which leaves out some data while estimating $\beta$. 
+
+For example, we will consider the "leave-one-out" $RMSE-CV$ error, which calculates residuals in each case leaving that data point out of consideration of the fit
+
+This and other types of $CV$ can be done with `caret` library
+
+---
+
+```{r message=F,warning=F}
+library('caret')
+train.control <- trainControl(method = "LOOCV")
+train(y ~ poly(x, degree = 2), data = poly_data,
+      method = "lm",trControl = train.control)
+```
+
+---
+
+```{r message=F,warning=F}
+train(y ~ poly(x, degree = 8), data = poly_data,
+      method = "lm",trControl = train.control)
+```
+
+---
+
+The general picture is
+
+
+```{r echo=F,fig2, out.width="95%"}
+knitr::include_graphics("error.png")
+```
+
+
+## Selection Procedures
+
+**data**: `seatpos`: physical measurements of people sitting in a car
+
+```{r message=F,warning=F}
+library(faraway) # contains dataset
+model <- lm(hipcenter ~ .,data=seatpos) #hipcenter measured in mm
+round(model$coefficients,2)
+```
+
+The data contains $p=8 +1 =9$ predictors. 
+
+Remember, the intercept $\beta_0$ counts as a predictor.
+
+---
+
+so the number of possible first order models is
+
+$$ \sum_{k=0}^{p-1} \binom{p-1}{k} = 2^{p-1} = 256$$
+
+In a **backwards search** we start with the model `hipcenter ~ .`, which is otherwise known as `hipcenter ~ Age + Weight + HtShoes + Ht + Seated + Arm + Thigh + Leg`
+
+then R repeatedly tries to delete until `hipcenter ~ 1`
+
+At each “step”, R reports the current model, its $AIC$, and the possible deletions steps with their $RSS$
+
+```{r results='hide'}
+hipcenter_mod = lm(hipcenter ~ ., data = seatpos)
+hipcenter_mod_back_aic = step(hipcenter_mod, direction = "backward")
+```
+
+---
+
+```{r echo=F}
+step(hipcenter_mod, direction = "backward")
+```
+
+---
+
+The step keeps going until the AIC no longer goes down.
+This is the model that we finally end up with from back steps
+
+```{r echo=T}
+hipcenter_mod_back_aic
+extractAIC(hipcenter_mod_back_aic) # returns p and AIC
+```
+
+---
+
+The resulting model increases the adjusted $R^2_a$
+
+```{r}
+summary(hipcenter_mod)$adj.r.squared
+summary(hipcenter_mod_back_aic)$adj.r.squared
+```
+
+There are also **forward searches**, **exhaustive searches**, and **step searches** all of them are trying to find the **Best model**
+
+You can also include interactions and higher order polynomial terms and then do step searches for best models for example
+
+`Y ~ .^2 + I(X_1^2) + I(X_2^2) + ... + I(X_p-1^2)`
+
+
+## What if you have a million features?
+
+* In situations like image recognition you really need a machine learning approach to decide what are the important features
+
+* But This is exactly what an ANN is doing - its figuring out how to combine the features and at what order, automatically!
+
+
+
+## Exercises unit-8c
+
+**data**; We will work again with the birthweight data set
+
+**FOLLOW ALL INSTRUCTIONS AND EXECUTE OR WRITE THE REQUESTED CODE IN THE RSTUDIO CONSOLE OR SCRIPT**
+
+Do the setup:
+
+```
+library(tidyverse)
+library(MASS)
+head(birthwt)
+```
+
+In order to understand the predictors type
+
+```
+?birthwt
+```
+
+---
+
+We will model birth weight in grams, `bwt`, as a response to all other variables as predictors
+
+let's look at the non-interacting case, type:
+
+```
+birthwt_full_model <- lm(bwt ~ ., data = birthwt)
+```
+
+call `summary(birthwt_full_model)` and inspect the results.
+
+call `cor(birthwt)` and inspect the results.
+
+Can you find any suggestions of collinearity?
+
+(You could also do `pairs(birthwt)` but this plot is not so instructive)
+
+
+
+---
+
+Do an AIC stepthrough of the full model you just created
+
+```
+step(birthwt_full_model,direction = "backward")
+```
+
+look at all of the console output as it steps through 
+
+Trace through the deletions in the console output.
+
+What predictors are retained in the backwards search model?
+
+
+What are the adjusted $R^2_a$ for the full model and the optimal model (based on AIC criteria)?
+
+**HINT:** you could use 
+
+```
+summary(birthwt_full_model)$adj.r.squared
+summary(step(birthwt_full_model,direction = "backward"))$adj.r.squared
+```
+
+or instead you can save the results of the step search
+
+---
+
+let's factor the race variable and name the values so it is more intelligible. Right now the race is encoded numerically (needs to become categorical)
+
+```
+birthwt$race = 
+recode_factor(birthwt$race,`1`="white",`2`="black",`3`="other")
+```
+
+Let's look at a simple interaction model
+
+```
+birthwt.lm.interact <- lm(bwt ~ race * age, data = birthwt)
+
+summary(birthwt.lm.interact)
+```
+
+The interaction allows us to fit the data with lines of different slopes. Next, visualize with
+
+```
+ qplot(x = age, y = bwt, color = race, data = birthwt)
+ + stat_smooth(method = "lm", se = FALSE, fullrange = TRUE)
+ ```
+
+
+---
+
+
+**Exercise 2** Numerical cross-validation check
+
+We will try to fit a simulated model, and find the optimal number of parameters
+
+$$Y=3+x_1+4x_1^2+5x_2+ 2x_2^4ϵ$$
+**data**: enter all codes below to construct the numerical dataset
+
+```
+sample_size = 37
+x_1 = 1:sample_size
+x_2 = c(72,4,1,7,6,3,6,2,2,5,6,2,34,3,34,6,2,4,3,4,63,
+  2,5,6,4,56,6,3,5,46,33,4,2,3,5,55,4)
+y = 3 + x_1 + 4 * x_1^2 +5*x_2+2*x_2^4 +
+  rnorm(n = sample_size, mean = 0, sd = 20)
+poly_dat =  data.frame(x_1,x_2, y)
+```
+We want to see the relation between cross-validation error and the number of parameters in the model.
+
+---
+
+Calculate the cross-validation error for polynomials from degree 1 to degree 8. Plot the cross-validation error versus the number of parameters.
+
+for example the model below will have **five** parameters (including the intercept)
+
+
+`fit_quad = lm(y ~ poly(x_1, degree = 2) + poly(x_2, degree = 2), data = poly_dat)`
+
+You can use the `caret` library to get the LOOCV error, start with
+
+```
+library('caret')
+train.control <- trainControl(method = "LOOCV")
+train(y ~ poly(x_1, degree = 1)+poly(x_2, degree = 1), data = poly_dat,
+      method = "lm",trControl = train.control)
+```
+
+---
+
+and you should end with the following
+
+```
+train(y ~ poly(x_1, degree = 8)+poly(x_2,degree=8), data = poly_dat,
+      method = "lm",trControl = train.control)
+```
+
+
+each time you should record the LOOCV MSE and then finally plot versus number of parameters.
+
+
+_fin_
